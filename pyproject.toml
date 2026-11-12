@@ -1,0 +1,25 @@
+[project]
+name = "reddit-trading-bot"
+version = "0.2.0"
+description = "Keyless paper-trading bot driven by credibility-weighted crowd sentiment and news"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "camoufox[geoip]>=0.5.9",
+    "feedparser>=6.0",       # github.com/kurtmckee/feedparser: Yahoo / Google News RSS
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "praw>=7.7",             # optional: Reddit official API, only used if keys are set
+    "psutil>=5.9",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "vadersentiment>=3.3.2", # github.com/cjhutto/vaderSentiment
+    "yfinance>=0.2.50",      # github.com/ranaroussi/yfinance: prices, no key
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

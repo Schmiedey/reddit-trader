@@ -1,0 +1,74 @@
+reddit:
+  subreddits: [wallstreetbets, stocks, investing, StockMarket, options, ValueInvesting, SecurityAnalysis]
+  pump_watch: [pennystocks]        # read only to detect pumps, never counted as signal
+  posts_per_sub: 50                # newest posts per run
+  hot_posts_for_comments: 8        # hot posts whose top comments we read
+  comments_per_hot_post: 30
+  new_authors_per_run: 40          # author lookups (age, karma) per run
+
+x:
+  provider: camoufox               # "camoufox" (keyless browser), "twitterapi_io" (paid key), or "disabled"
+  cache_minutes: 60                # each account/search is fetched at most once per hour
+  accounts: [unusual_whales, DeItaone, FirstSquawk, LiveSquawk, zerohedge, KobeissiLetter]
+  cashtag_search_top_n: 10         # search $TICKER for the top N trending Reddit tickers
+  max_tweets_per_query: 20
+
+stocktwits:
+  top_n: 15
+
+news:
+  top_n: 25                        # trending tickers to fetch Yahoo + Google News RSS for
+  per_feed: 15
+
+scoring:
+  lookback_hours: 72
+  buzz_hours: 24
+  baseline_days: 30
+  min_authors: 5                   # distinct trusted voices before a ticker can be traded
+  strategy: crowd_swing  # crowd_swing | momentum | contrarian | attention (see BACKTEST.md)
+  buy_threshold: 0.5  # crowd_swing scores: loss bounce 0.9+, early build-up 0.5+
+  loss_rule: bounce                # bounce = 3+ loss posts | capitulation = also needs a sharp drop (failed out of sample)
+  loss_size: 1.0                   # position size multiplier for loss-bounce trades
+  early_build_up: true             # buyers doubling before the price moves; held up in all three test windows
+  exit_threshold: -9               # no sentiment exit; leave via stop/target/time
+  min_agreeing_sources: 1         # backtest is Reddit-only, so 2 sources was never tested
+  recency_half_life_hours: 24      # an opinion counts half as much a day later
+  shrink_voices: 3                 # few voices are pulled toward neutral
+  buzz_warmup_days: 7              # ignore mention spikes until there's a week of baseline
+  weights: {crowd: 0.5, news: 0.3, buzz: 0.2}
+  crowd_weights: {reddit: 0.6, x: 0.25, stocktwits: 0.15}
+
+filter:
+  min_account_age_days: 30
+  min_karma: 50
+  min_price: 5
+  min_avg_volume: 1000000
+  pump_spike_ratio: 5
+  pump_lowcred_share: 0.6
+  pump_sub_share: 0.3
+
+trading:
+  dry_run: false  # true = score and print only, queue no paper orders
+  max_positions: 10
+  position_pct: 0.10
+  stop_loss_pct: 0.07
+  take_profit_pct: 0.15
+  max_hold_days: 9  # sell at the open after 10 trading days (backtested hold)
+  max_new_per_day: 3               # stagger entries instead of buying 10 hype names at once
+  risk_per_trade_pct: 0.02         # size so hitting the stop costs ~2% of the account
+  atr_stop_mult: 4.0  # wide stop: tight stops lost money in every backtest
+  min_stop_pct: 0.04               # ...but never tighter than 4%
+  max_stop_pct: 0.25               # ...or looser than 25%
+  reward_risk: 50  # no profit target; exit by time or stop
+  max_ret5: 9                      # chase check off (crowd_swing has its own 10% rule)
+  max_atr_pct: 0.08                # skip if it moves 8%+ a day on average
+  risk_off_threshold_bump: 0.0     # SPY under its 50-day average: demand a higher score...
+  risk_off_max_new: 3  # no throttle in weak markets: loss bounces happen there
+  use_entry_vetoes: false          # trend/volatility vetoes would block loss bounces; off in backtest
+
+paper:
+  starting_cash: 100000
+  slippage_pct: 0.0005             # 0.05% worse than the open on every fill
+
+runtime:
+  cpu_limit_pct: 10
