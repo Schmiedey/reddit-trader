@@ -196,3 +196,21 @@ def test_stance_needs_the_authors_own_buy():
     assert stance_for("Management said on the earnings call that NVDA demand stays strong, analysts noted.", "NVDA", 1)[0] is None
     title = "Broadcom (AVGO) hit a 52 week low"
     assert stance_for(f"{title}\nI bought more AVGO while NVDA rebounded.", "NVDA", 2, title=title, others=["AVGO", "NVDA"])[0] is None
+
+
+def test_comment_stance_is_the_authors_own_position():
+    from bot.signals.stance import comment_stance as cs
+    assert cs("Loaded AMD calls before close.", "AMD", 1) == "BUY"
+    assert cs("I bought more VST today", "VST", 1) == "BUY"
+    assert cs("My AMD puts are showing signs of life", "AMD", 1) == "SELL"
+    assert cs("amd 11/4 410p locked and loaded", "AMD", 1) == "SELL"
+    assert cs("I put everything I have into AMZN calls.", "AMZN", 1) == "BUY"          # "put" the verb
+    assert cs("Still holding an MU put...", "MU", 1) == "SELL"
+    assert cs("Been holding AMD for 5 years.", "AMD", 1) == "HOLD"
+    assert cs("selling SMCI puts. should be easy money", "SMCI", 1) == "HOLD"
+    for chatter in ("AMD is dumping", "META still dumping lol", "anyone shorting AMD", "Friday AAPL puts?",
+                    "HTZ short squeeze tomorrow?", "Asian buying AMD", "I hope you arent bag holding AMD",
+                    "Imagine buying puts on AAPL and then it surges 6%", "Should've held those GOOG puts longer",
+                    "Good thing I did NOT buy those SPY puts!", "AMD puts or calls", "Sold my MU puts for 4x",
+                    "Surely stellar AMD earnings will reignite the rally instead of selling off 10%"):
+        assert cs(chatter, chatter.split()[0] if chatter.split()[0].isupper() else "AMD", 1) is None, chatter

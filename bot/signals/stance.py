@@ -107,3 +107,66 @@ def stance_for(text, ticker, n_tickers, flair="", sentiment=0.0, title="", other
     scoped, direct = scoped_text(text, ticker, n_tickers)
     st, strength = classify(scoped, flair, sentiment, full=text, title=title)
     return st, strength * (1.0 if direct else 0.5)
+
+
+# ---------- comments ----------
+# Comments are short, sarcastic and full of chatter about what the PRICE or OTHER PEOPLE are doing, so
+# they get stricter rules than posts: only a sentence in which the author states their own position.
+C_BEAR = re.compile(
+    r"\bputs\b|\b\d+(?:\.\d+)?p\b|\b(?:a|an|my|the|one|this|that|\d+[kp]?)\s+(?:\$?[A-Za-z]{2,5}\s+)?put\b(?!\s+(?:in|on|it|into|up|down|out))|\bput\s+(?:options?|lottos?|contracts?|spreads?)|"
+    r"\b(?:i'?m|im|i am|i was|i went|going|went|am|stay(?:ing)?)\s+short\b|\bshort(?:ing|ed)\b|"
+    r"\b(?:a|my|the|took|opened)\s+short\b(?![- ](?:squeeze|term|interest|of))|\bshort\s+(?:position|shares)|\binverse\b", re.I)
+C_SELL = re.compile(
+    r"\b(sold|selling(?! off)|trimmed|trimming|took profits?|taking profits?|cashed out|closed (?:my|out)|exited|"
+    r"got out|stopped out|dumped (?:my|it|them|all|everything|half)|i dumped)\b", re.I)
+C_BUY = re.compile(
+    r"\b(bought|buying|loaded|loading|added|adding|opened|all[- ]in|yolo(?:ed|'d|ing)?|i'?m long|picked up|grabbed|"
+    r"scooped|got in|jumped in|new position|averag(?:ed|ing) (?:down|up)|dca(?:ing|'d)?|"
+    r"(?<!earnings )(?<!conference )calls|call options?|leaps|\d[\d,.]*k?\s*shares|shares at|in at \$?\d)\b", re.I)
+C_BULL_PUTS = re.compile(r"\b(?:sold|selling|sell|wrote|writing)\s+(?:\S+\s+){0,3}puts?\b(?!\s+for)|\bcsps?\b|cash[- ]secured|"
+                         r"puts?\s+(?:got\s+)?assigned", re.I)
+BOTH_WAYS = re.compile(r"\bcalls?\b.*\bputs?\b|\bputs?\b.*\bcalls?\b", re.I)
+CLOSED_BET = re.compile(r"\b(sold|closed|exited|dumped|cashed out)\b[^.!?]{0,25}\b(puts?|calls?|shorts?)\b", re.I)
+YOU = re.compile(r"\b(you|your|you'?re|u|ur|y'?all)\b", re.I)
+THEM = re.compile(r"\b(he|she|they|them|their|people|everyone|everybody|anyone|anybody|someone|somebody|guys?|bro|"
+                  r"institutions?|retail|bulls?|bears?|mms?|algos?|wsb|whoever|asians?|europeans?|boomers?)\b", re.I)
+HYPO = re.compile(r"\b(should(?:'?ve| have|a)?|could(?:'?ve| have|a)?|would(?:'?ve| have|a)?|wish|regret\w*|tempted|"
+                  r"imagine|what if|if i|might|maybe|thinking|want(?:ed)? to|plan(?:ning)? to|about to|meant to|almost|"
+                  r"close to|considering|wondering|do i|should i|talk me out|hindsight|urge)\b", re.I)
+NEG = re.compile(r"\b(not|never|didn'?t|don'?t|doesn'?t|won'?t|wouldn'?t|can'?t|couldn'?t|ain'?t|isn'?t|aren'?t|"
+                 r"glad i|good thing)\b|n't\b", re.I)
+
+
+def comment_stance(text, ticker, n_tickers):
+    """BUY / SELL (sold, or a bearish bet) / HOLD / None for one comment and one ticker."""
+    scoped, _ = scoped_text(text, ticker, n_tickers)
+    b = s = bear = h = 0
+    for sent in SENTENCES.split(scoped):
+        sent = sent.strip()
+        if not sent or sent.endswith("?") or YOU.search(sent):
+            continue  # a question, or talking to someone else
+        mine = bool(FIRST.search(sent))
+        if not mine and (THEM.search(sent) or len(sent.split()) > 6):
+            continue  # someone else's trade, or commentary: only "I ..." sentences and short lines count
+        if HYPO.search(sent):
+            continue  # "should have bought", "do I buy", "tempted to"
+        if C_BULL_PUTS.search(sent):
+            h += 1  # selling puts is a bet the stock holds up
+            continue
+        if HOLD.search(sent) and not C_BEAR.search(sent):
+            h += 1
+            continue
+        if NEG.search(sent) or (CLOSED_BET.search(sent) and not HOLD.search(sent)):
+            continue  # "did not buy", "sold my puts" (a closed bet, no position left)
+        if BOTH_WAYS.search(sent) and not mine:
+            continue  # "AMD puts or calls"
+        if C_BEAR.search(sent):
+            bear += 1
+        else:
+            b += len(C_BUY.findall(sent))
+            s += len(C_SELL.findall(sent))
+    if bear or s > b:
+        return "SELL" if bear + s > b or bear else None
+    if b > s:
+        return "BUY"
+    return "HOLD" if h else None

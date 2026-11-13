@@ -297,3 +297,58 @@ beta 0.53, alpha +1%/yr (t 0.1); random beta 0.61, alpha +14%/yr (t 0.9).
 - Neither rule beats random Reddit names. Whatever edge exists comes from holding names Reddit talks about
   in a year when they rallied, not from who is buying.
 - The ranking flipped completely on a classifier change. Treat every number in this file as fragile.
+
+## Round 9: does the majority of r/wallstreetbets know what it is doing? (2026-11-13)
+
+The bot had only ever read posts: about 400 a day on WSB against about 30,000 comments. This round reads
+the comments. `scripts/backfill_comments.py --stance-only` downloads every WSB comment containing a
+buy/sell/hold word (about a quarter of all comments, 5,000–7,700 a weekday); `stance.comment_stance`
+keeps only comments where the author states their OWN position (drops questions, what-ifs, price talk
+like "AMD is dumping", other people's trades, "put" the verb); `bot.backtest.majority` counts each
+author once per stock by their latest stance in 5 trading days and scores the next 5 and 10 days.
+Hand check of the comment rules: first version 49 of 100 right; final version 43 of 64 clearly right,
+8 unclear, 13 wrong. Every threshold in `majority.py` (10+ authors, majority = over half, 10-day
+cooldown) was fixed before any result was seen.
+
+Data: 55 weekdays, Aug 28 – Nov 12 2026 (weekends not downloaded), 15,473 comment stances + 1,067 post
+stances from 5,061 authors, 50 days scored, 1,106 stock-days with 10+ authors (about 22 stocks a day).
+(The first run used Sep 22 – Nov 12 only; adding Aug 28 – Sep 21 afterwards halved the losses but changed no sign.)
+
+**What the majority does.** It is buying on 57% of stock-days, betting against on 20%, split on 23%. It
+buys after drops (the stock's prior 5-day move averages −4.7%) and bets against stocks that have risen (+3.8%).
+
+**Whether it is right.** Returns from the next open, after costs. "vs others" = minus the same day's
+average talked-about stock; t is across days.
+| Stock-days where... | n | Next 5 days | vs SPY | vs others (t) | Next 10 days | vs SPY | vs others (t) |
+|---|---|---|---|---|---|---|---|
+| majority buying | 563 | −2.5% | −1.9% | −0.4% (−2.4) | −4.4% | −3.7% | −0.7% (−2.6) |
+| majority betting against | 191 | +0.7% | +1.0% | +1.6% (4.2) | +1.1% | +1.1% | +2.3% (4.2) |
+| no majority | 226 | −1.9% | −1.5% | −0.4% | −2.2% | −1.9% | −0.1% |
+| under 35% buyers | 103 | +1.5% | +1.9% | +2.6% (2.2) | +1.7% | +1.7% | +2.2% |
+| 80%+ buyers | 65 | −1.1% | −0.7% | +0.3% | −3.3% | −3.1% | −1.4% |
+
+- Daily rank correlation between how bullish the crowd is and the next return: −0.06 over 5 days (t −1.9),
+  −0.14 over 10 days (t −3.7). The same sign as Round 1's post-sentiment result (−0.16).
+- It is not only that they buy falling stocks. Next 5 days vs SPY, majority buying / betting against:
+  stocks down 5%+ in the prior 5 days −2.0% (n 241) / +3.8% (n 16); stocks that barely moved −1.6% (n 270) /
+  +1.2% (n 97); stocks up 5%+ −3.2% (n 52) / +0.2% (n 78).
+- As tradable signals (once per stock, 10-day cooldown) the effect mostly disappears. 10 days vs others:
+  majority starts buying −0.4% (n 98), flips to buying −0.2% (n 48), majority starts betting against +1.9%
+  (n 43, t 1.4), flips to betting against +0.9% (n 27). None is significant.
+- **Individuals:** 10,039 graded calls by 3,892 authors averaged −0.9% vs SPY over 5 days; 47% were right.
+  Of 865 authors with 3+ calls, 39% were right more often than wrong. Past record predicts nothing: early
+  winners later averaged −0.50%, early losers −0.53% (325 authors, rank correlation +0.09). Stocks that
+  authors with a good record were mostly buying lost 3.5% over 5 days.
+
+**Decision (rule set in advance):** following the majority does not beat the other talked-about stocks in
+either half of the period, so it does not become a live account.
+
+**How much to trust it:** little, in either direction. Eleven weeks, mostly one regime: talked-about stocks
+fell 2.4% per 5 days on average (Nasdaq correction, the Nvidia scandal), and a crowd that buys dips loses
+in a falling market. Days overlap, so the t-values overstate. The classifier is right about 70–75% of the time.
+The one lead is the inverse: stocks the majority bets against held up best. That needs months of
+comments including a rising market before it is worth an account. The download is resumable
+(`scripts/backfill_comments.py --stance-only --weekdays --newest-first`), about 8 minutes per day.
+
+Also found: the post history's top "tickers" include jargon that matches real symbols (RSI, ET, PR, IP,
+NASA, WTF). `comments_probe.JARGON` excludes them for comments; the post pipeline still counts them.
