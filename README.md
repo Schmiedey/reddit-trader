@@ -89,12 +89,11 @@ The report's **signal scorecard** grades every past signal against SPY over the 
 10 trading days, by score group. After 3–4 weeks, the "Buy zone" group should beat
 "Neutral". If it doesn't, the logic isn't adding anything. All thresholds live in `config.yaml`.
 
-## Side test: copying public crypto wallets (paper only)
-`bot/copytrade` mirrors the perp positions of public Hyperliquid wallets in $10k paper accounts,
-every 30 minutes, with fees and slippage. It places no orders. "picks" are wallets that passed a
-strict track-record filter; "control" are random wallets. The picks have to beat the control.
+## Copy desk: copying public crypto wallets (paper only)
+`bot/copydesk/desk.py` paper-copies the Hyperliquid wallets in `bot/copydesk/leaders.json`. It runs in
+GitHub Actions (`.github/workflows/copydesk.yml`), replays the wallets' public trades since the last
+run at 1-, 15- and 60-minute delays, and saves `copy_ledger.json` to the `paper-ledger` branch.
+Dashboard: `/copy` on the Render app. Research behind it: `research/copytrade/FINDINGS.md`.
 
-    .venv/bin/python -m bot.copytrade.run --report
-
-Background and method: `research/copytrade/FINDINGS.md`. Wallet list: `research/copytrade/wallets.json`
-(rebuild with `research/copytrade/select_live.py`). State: `data/copytrade.db`.
+The earlier local version (`bot/copytrade`, 52 picks vs 30 random wallets, `data/copytrade.db`) was
+retired on 2026-11-13 and no longer runs.

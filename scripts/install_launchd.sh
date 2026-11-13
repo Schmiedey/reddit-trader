@@ -34,8 +34,6 @@ EOF
 
 make_plist com.redditbot.collect bot.collect 900
 make_plist com.redditbot.trade bot.trader.run_daily 1800 "<string>--scheduled</string>"
-# Paper copy-trade test on public Hyperliquid wallets (crypto trades 24/7, so it runs whenever the Mac is awake).
-make_plist com.redditbot.copytrade bot.copytrade.run 1800
 
 # Keep the Mac from idle-sleeping 16:25-18:25 ET on weekdays so the daily trade run happens.
 # (caffeinate -i can't stop lid-close sleep on battery.) Time converted to this Mac's timezone.
