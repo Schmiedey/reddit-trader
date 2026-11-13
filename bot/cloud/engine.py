@@ -25,7 +25,7 @@ from ..config import CFG, DATA
 from ..db import connect
 from ..filter.pump_guard import check
 from ..ingest import store_item
-from ..signals.crowd import _cut, ensure_stances
+from ..signals.crowd import STANCE_VERSION, _cut, ensure_stances, mark_stances_current
 from ..signals.technicals import technicals
 from ..sources import arctic
 from ..sources.prices import daily_bars, load_valid_symbols
@@ -46,6 +46,10 @@ RULE_NAMES = {"buildup": "Early build-up", "mostbought": "Most bought", "random"
 BUILD_MIN, BUILD_RATIO, BUILD_MAX_RET5, MOST_MIN = 4, 2, 0.10, 5
 COOLDOWN = 10  # trading days. A signal is only bought on the day it first appears, then ignored this long.
 KEEP_DAYS = 40
+# Index and sector funds: people "buying VOO" is retirement advice, not a crowd bet on one company.
+FUNDS = set("""SPY VOO IVV SPLG QQQ QQQM VTI VT VXUS VEA VWO IWM DIA SCHD SCHG SCHB VUG VGT VYM XLK XLF XLE XLV
+SMH SOXX ARKK TQQQ SQQQ SPXL SPXS SPXU UPRO SDS SSO SH PSQ QLD SOXL SOXS TNA TZA UVXY VXX VIXY SVIX
+GLD IAU SLV TLT TMF TBT SHY BIL SGOV HYG LQD JEPI JEPQ IBIT FBTC ETHA BITO""".split())
 
 
 def rule_hits(f, ret5):
@@ -103,6 +107,14 @@ class Engine:
         """Fetch new posts for every subreddit. Re-reads the last `overlap_h` hours to catch late arrivals
         and removals. Returns {"new", "failed"}; a subreddit that fails is retried on the next call."""
         now = now or time.time()
+        if self.get("stance_version") != STANCE_VERSION:
+            # The classifier changed. Stances restored from the ledger have no posts behind them here,
+            # so drop everything and re-read the archive window to classify it again.
+            for table in ("posts", "mentions", "stances"):
+                self.con.execute(f"DELETE FROM {table}")
+            self.con.execute("DELETE FROM meta WHERE key LIKE 'seen:%'")
+            self.con.commit()
+            self.set("stance_version", STANCE_VERSION)
         valid = load_valid_symbols(self.con)
         new, failed = 0, []
         for sub in SUBS:
@@ -163,7 +175,7 @@ class Engine:
         day = today.isoformat()
         tc, sc, fc = CFG["trading"], CFG["scoring"], CFG["filter"]
         feats = self.features(now)
-        cands = sorted(t for t, f in feats.items() if f["buyers5"] >= BUILD_MIN and t != "SPY")  # SPY is the yardstick
+        cands = sorted(t for t, f in feats.items() if f["buyers5"] >= BUILD_MIN and t not in FUNDS)  # SPY is the yardstick
         brokers = self.brokers()
         held_all = {s for b in brokers.values() for s in b.positions()} | {o["sym"] for b in brokers.values() for o in b.pending()}
         bars = self.bars_fn(self.con, set(cands) | held_all | {"SPY"}, today - timedelta(days=130))
@@ -383,6 +395,8 @@ class Engine:
         self.con.executemany("INSERT OR IGNORE INTO stances VALUES(?,?,?,?,?,?)", led.get("stances", []))
         self.con.executemany("INSERT INTO meta VALUES(?,?)", [(k, json.dumps(v)) for k, v in led.get("meta", {}).items()])
         self.con.commit()
+        if led.get("meta", {}).get("stance_version") == STANCE_VERSION:
+            mark_stances_current(self.con)  # the restored stances are already from this classifier
         for aid, a in led.get("accounts", {}).items():
             if aid not in ACCOUNTS:
                 continue

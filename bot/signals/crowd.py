@@ -29,8 +29,32 @@ CAPITULATION = ((3, -0.10), (2, -0.15))  # (loss posts needed, 5-day drop needed
 BUYERS_MIN, BUILD_RATIO, MAX_RET5 = 4, 2, 0.10
 
 
+STANCE_VERSION = 2  # bump whenever stance.py changes: stored stances are then classified again
+
+
+def stances_current(con):
+    con.execute("CREATE TABLE IF NOT EXISTS stance_version(v INTEGER)")
+    r = con.execute("SELECT v FROM stance_version").fetchone()
+    return bool(r) and r[0] == STANCE_VERSION
+
+
+def mark_stances_current(con):
+    con.execute("CREATE TABLE IF NOT EXISTS stance_version(v INTEGER)")
+    con.execute("DELETE FROM stance_version")
+    con.execute("INSERT INTO stance_version VALUES(?)", (STANCE_VERSION,))
+    con.commit()
+
+
 def ensure_stances(con):
-    """Classify every Reddit post mention that has no stance yet (also backfills an old database)."""
+    """Classify every Reddit post mention that has no stance yet (also backfills an old database).
+    Stances from an older classifier are dropped and redone first."""
+    if not stances_current(con):
+        con.execute("DELETE FROM stances")
+        mark_stances_current(con)
+    tickers = defaultdict(list)
+    for r in con.execute("SELECT m.post_id, m.ticker FROM mentions m LEFT JOIN stances s ON s.post_id = m.post_id "
+                         "AND s.ticker = m.ticker WHERE m.source = 'reddit' AND s.post_id IS NULL"):
+        tickers[r[0]].append(r[1])
     rows = con.execute(
         """SELECT m.post_id, m.ticker, m.author, m.created, m.sentiment, p.community, p.title, p.body, p.flair,
                   (SELECT COUNT(*) FROM mentions x WHERE x.post_id = m.post_id) n
@@ -40,7 +64,8 @@ def ensure_stances(con):
     for r in rows:
         st = None
         if r["author"] not in JUNK and r["n"] <= 5:  # 6+ tickers is a watchlist, not a position
-            st, _ = stance_for(f"{r['title']}\n{r['body']}".strip(), r["ticker"], r["n"], r["flair"], r["sentiment"] or 0.0)
+            st, _ = stance_for(f"{r['title']}\n{r['body']}".strip(), r["ticker"], r["n"], r["flair"], r["sentiment"] or 0.0,
+                              title=r["title"], others=tickers[r["post_id"]])
         con.execute("INSERT OR IGNORE INTO stances VALUES(?,?,?,?,?,?)",
                     (r["post_id"], r["ticker"], (r["community"] or "").lower(), r["author"], r["created"], st or "NONE"))
     con.commit()

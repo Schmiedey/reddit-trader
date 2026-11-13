@@ -269,3 +269,31 @@ real hits moved to the same number of random eligible names (4+ buyers in 5 days
   only if it beats this account. Replay with the new desk: Early build-up +28.5%, Most bought +100.9%,
   Random Reddit names +73.8% (one seed; the 10-seed average was +44%), SPY +40.5%. The existing two
   accounts moved a few points from Round 6 after the price cache refreshed, more evidence of noise.
+
+## Round 8: a stricter buy classifier (2026-11-12)
+
+Reading the posts behind the live signals showed that about two thirds of "buys" were not buys: news
+headlines, other people's trades ("Senator bought NVDA"), questions ("Buying opportunity?"), a $115K
+puts YOLO, posts about a different ticker, and index-fund advice. `stance.py` now needs the author's own
+buy (first person or a short title-style line), skips questions and plans, reads puts anywhere in a
+YOLO post, drops a ticker when the title names a different one, and treats "bought and sold" as no
+position. On 66 hand-read posts from this week: 16 of 18 real buys kept, false buys 36 → 9. Index and
+sector funds (SPY, VOO, QQQ, leveraged ETFs...) no longer generate signals. `STANCE_VERSION = 2` makes every
+database, including the live desk, reclassify once.
+
+History: BUY stances 33,324 → 17,135, DD 8,368 → 4,939, SELL 26,295 → 30,411.
+Cloud replay, Aug 2024 – Nov 2026 (SPY +40.5%), random account is one seed:
+| Account | Old classifier | New classifier | Unseen year | Later 15 mo | Worst drop | Trades |
+|---|---|---|---|---|---|---|
+| Early build-up | +28.5% | **+46.7%** | +45.7% | +0.7% | −26.8% | 274 |
+| Most bought | +100.9% | **+17.6%** | +30.8% | −10.1% | −25.5% | 229 |
+| Random Reddit names | +73.8% | **+58.9%** | +66.6% | −4.6% | −23.9% | 288 |
+
+Beta check, new classifier, 27 months vs SPY: Early build-up beta 0.69, alpha +8%/yr (t 0.6); Most bought
+beta 0.53, alpha +1%/yr (t 0.1); random beta 0.61, alpha +14%/yr (t 0.9).
+
+- **Most bought's lead was an artifact of the noisy classifier.** Counting news and chatter as buys made
+  it a measure of attention; with real buys only, it trails SPY and the random control.
+- Neither rule beats random Reddit names. Whatever edge exists comes from holding names Reddit talks about
+  in a year when they rallied, not from who is buying.
+- The ranking flipped completely on a classifier change. Treat every number in this file as fragile.

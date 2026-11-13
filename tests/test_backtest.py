@@ -180,3 +180,19 @@ def test_live_job_end_to_end_capitulation_trade(tmp_path, monkeypatch):
     assert sell["fill_day"] == days[d0 + 11] and sell["fill_price"] > pos["entry_price"]
     assert con.execute("SELECT cash FROM paper_account").fetchone()[0] > 100_000
     assert con.execute("SELECT COUNT(*) FROM equity").fetchone()[0] == 12
+
+
+def test_stance_needs_the_authors_own_buy():
+    from bot.signals.stance import stance_for
+    assert stance_for("Bought NVDA calls at open", "NVDA", 1)[0] == "BUY"                      # short title-style line
+    assert stance_for("NVDA dip\nI picked up 200 shares this morning.", "NVDA", 1)[0] == "BUY"
+    assert stance_for("Senator bought $NVDA again before the disclosure went public, according to filings.", "NVDA", 1)[0] is None
+    assert stance_for("So... NVDA calls tomorrow?", "NVDA", 1, title="So... NVDA calls tomorrow?")[0] is None
+    assert stance_for("Buying opportunity?\nI'm wondering whether to add here.", "NVDA", 1, title="Buying opportunity?")[0] is None
+    assert stance_for("NVDA down 10%\nI am thinking to buy 170 calls next week.", "NVDA", 1)[0] is None
+    assert stance_for("Jensen will sink it. 69 PUTS, $115K\nNVDA is the next Cisco.", "NVDA", 2, "YOLO",
+                      title="Jensen will sink it. 69 PUTS, $115K")[0] == "SELL"
+    assert stance_for("NVDA bought and sold today in panic", "NVDA", 1)[0] is None
+    assert stance_for("Management said on the earnings call that NVDA demand stays strong, analysts noted.", "NVDA", 1)[0] is None
+    title = "Broadcom (AVGO) hit a 52 week low"
+    assert stance_for(f"{title}\nI bought more AVGO while NVDA rebounded.", "NVDA", 2, title=title, others=["AVGO", "NVDA"])[0] is None

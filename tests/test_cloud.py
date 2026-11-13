@@ -117,3 +117,26 @@ def test_due_work_schedule():
     assert due({**done, "defer": "2026-11-13"}, False, at("2026-11-13", 19))["evening_day"] is None
     assert due({**done, "defer": "2026-11-13"}, False, at("2026-11-14", 9))["evening_day"] == "2026-11-13"
     assert due({**done, "skip_day": "2026-11-13"}, False, at("2026-11-14", 9))["evening_day"] is None
+
+
+def test_new_classifier_rereads_the_archive(tmp_path, monkeypatch):
+    import bot.cloud.engine as E
+    from bot.signals.crowd import STANCE_VERSION, stances_current
+    asked = []
+    monkeypatch.setattr(E, "load_valid_symbols", lambda con: set())
+    monkeypatch.setattr(E.arctic, "fetch_range", lambda sub, lo, hi, tries=4: asked.append(lo) or [])
+    eng = Engine(tmp_path / "a", park=False)
+    eng.con.execute("INSERT INTO stances VALUES('p1','NVDA','wallstreetbets','u1',?,'BUY')", (time.time() - 3600,))
+    eng.set("seen:wallstreetbets", time.time() - 600)
+    led = eng.export()                                       # a ledger saved by the old classifier
+    eng = Engine(tmp_path / "b", park=False)
+    eng.load(led)
+    assert not stances_current(eng.con)
+    now = time.time()
+    eng.collect(now)
+    assert eng.con.execute("SELECT COUNT(*) FROM stances").fetchone()[0] == 0   # old stances dropped
+    assert min(asked) <= now - 21 * 86400 + 1                                   # whole window read again
+    assert eng.get("stance_version") == STANCE_VERSION and stances_current(eng.con)
+    eng2 = Engine(tmp_path / "c", park=False)
+    eng2.load(eng.export())                                  # next restart: no second re-read
+    assert stances_current(eng2.con)
