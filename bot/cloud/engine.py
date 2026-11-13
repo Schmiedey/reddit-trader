@@ -232,7 +232,8 @@ class Engine:
             acon.commit()
             out[aid] = {"events": events, "buys": buys, "equity": round(equity, 2)}
         self.set("signals", {"day": day, "ts": now, "rows": rows[:60]})
-        self.set("prices", {"ts": now, "px": {s: v[-1]["c"] for s, v in bars.items() if v}})
+        self.set("prices", {"ts": now, "px": {s: v[-1]["c"] for s, v in bars.items() if v},
+                            "spark": {s: [round(b["c"], 2) for b in v[-30:]] for s, v in bars.items() if v}})
         self.set("last_daily", day)
         return {"ok": True, "day": day, "accounts": out}
 
@@ -268,11 +269,14 @@ class Engine:
         """Refresh the latest prices of everything held, for the dashboard. Trades nothing."""
         now = now or time.time()
         day = datetime.fromtimestamp(now, ET).date()
-        syms = {s for b in self.brokers().values() for s in b.positions()} | {"SPY"}
-        bars = bars if bars is not None and syms <= set(bars) else self.bars_fn(self.con, syms, day - timedelta(days=10))
-        px = (self.get("prices") or {"px": {}})["px"]
+        board = [r["ticker"] for r in (self.get("signals") or {}).get("rows", []) if r.get("price") is not None][:16]
+        syms = {s for b in self.brokers().values() for s in b.positions()} | {o["sym"] for b in self.brokers().values() for o in b.pending()} | set(board) | {"SPY"}
+        bars = self.bars_fn(self.con, syms, day - timedelta(days=50))
+        old = self.get("prices") or {}
+        px, spark = old.get("px", {}), old.get("spark", {})
         px.update({s: v[-1]["c"] for s, v in bars.items() if v})
-        self.set("prices", {"ts": now, "px": px})
+        spark.update({s: [round(b["c"], 2) for b in v[-30:]] for s, v in bars.items() if v})
+        self.set("prices", {"ts": now, "px": px, "spark": spark})
 
     # ---------- dashboard state ----------
     def state(self, now=None):
@@ -338,7 +342,7 @@ class Engine:
         return {
             "now": now, "mode": "paper", "starting_cash": CFG["paper"]["starting_cash"], "accounts": accounts,
             "signals": self.get("signals") or {"day": None, "rows": []},
-            "prices_ts": prices["ts"], "spy": px.get("SPY"), "last_daily": self.get("last_daily"),
+            "prices_ts": prices["ts"], "spy": px.get("SPY"), "spark": prices.get("spark", {}), "last_daily": self.get("last_daily"),
             "collect": self.get("collect"), "collect_ok": self.get("collect_ok"),
             "data": {"first_post": first[0], "latest_post": first[1], "stances": first[2], "posts_24h": n24,
                      "warm": bool(first[0] and first[0] <= _cut(now, 10))},
