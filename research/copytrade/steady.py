@@ -20,7 +20,7 @@ GRID = np.arange(G0, G1 + 1, H); N = len(GRID); Q = N // 4
 WIN = {"Q1": (0, Q), "Q2": (Q, 2 * Q), "Q3": (2 * Q, 3 * Q), "Q4": (3 * Q, N),
        "Q1Q2": (0, 2 * Q), "Q2Q3": (Q, 3 * Q), "Q3Q4": (2 * Q, N), "ALL": (0, N)}
 os.makedirs(os.path.join(C, "candles_1h"), exist_ok=True)
-main_dex = lambda c: not c.startswith("@") and "/" not in c and ":" not in c
+main_dex = lambda c: not c.startswith(("@", "#")) and "/" not in c and ":" not in c   # perps on the main exchange only
 
 _px = {}
 def price_grid(coin):
@@ -29,7 +29,17 @@ def price_grid(coin):
     if os.path.exists(f):
         cs = json.load(open(f))
     else:
-        r = post({"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h", "startTime": G0 - H, "endTime": G1 + H}}) or []
+        r = None
+        for _ in range(2):   # delisted coins error out: fail fast and treat as "no price"
+            try:
+                import urllib.request
+                req = urllib.request.Request("https://api.hyperliquid.xyz/info", headers={"Content-Type": "application/json"},
+                    data=json.dumps({"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h", "startTime": G0 - H, "endTime": G1 + H}}).encode())
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    r = json.load(resp); break
+            except Exception:
+                time.sleep(3)
+        r = r or []
         time.sleep(1.2)
         cs = [[c["t"], float(c["o"])] for c in r]
         json.dump(cs, open(f, "w"))

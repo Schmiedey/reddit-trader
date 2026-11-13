@@ -1,0 +1,47 @@
+name: Run the copy desk
+
+# Paper-copies the wallets in bot/copydesk/leaders.json. No server needed: every leader trade is
+# public, so each run replays everything since the last one (see bot/copydesk/desk.py) and saves
+# copy_ledger.json to the paper-ledger branch. Standard-library Python, about a minute per run.
+# GitHub fires scheduled runs late and irregularly; the desk catches up exactly however long the gap.
+
+on:
+  schedule:
+    - cron: "8,38 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: copydesk
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: bot/copydesk
+      - uses: actions/checkout@v4
+        with:
+          ref: paper-ledger
+          path: led
+
+      - name: Replay the leaders' trades since the last run
+        run: python3 src/bot/copydesk/desk.py led/copy_ledger.json
+
+      - name: Save the copy ledger
+        run: |
+          cd led
+          git config user.name "copy-desk"
+          git config user.email "actions@users.noreply.github.com"
+          git add copy_ledger.json
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -q -m "copy ledger $(date -u +%FT%RZ)"
+          # the paper desk workflow also pushes to this branch (different file): rebase and retry
+          for i in 1 2 3 4 5; do git push -q && { echo "copy ledger saved"; exit 0; }; git pull -q --rebase; sleep 5; done
+          exit 1

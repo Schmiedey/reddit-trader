@@ -85,3 +85,35 @@ the exchange's own recorded position. BTC fell 15.7% in the window.
   them. That is lookahead, and even with it they made −0.5% after costs.
 - So the live forward test is expected to fail. It's still worth running, because 51 days in one
   falling market is a small sample.
+
+## Search for "actually good" wallets (2026-11-13)
+`fetch_long.py` + `steady.py`: 278 wallets that made money Apr 21 – Jul 31, full fills since Apr 21
+(214 usable; 64 trade too often for the API's 10k-fill history). The live copier maths was replayed
+hourly for 7 months, split into four ~51-day quarters (BTC: −17%, 0%, +37%, −17%).
+
+- **Steady copy curves don't persist.** Wallets with Sharpe >= 2, drawdown <= 20% and low BTC correlation
+  over ~103 days were then copied for the next quarter: +2.6% vs +19.8% for the rest of the pool, and
+  −6.5% vs −3.3%. Rank correlation of past Sharpe with next return: −0.09 and −0.31.
+- **Winning one quarter made winning the next less likely**: 62% vs 81%, 46% vs 68%, 31% vs 48%
+  (winners vs losers of the previous quarter).
+- **Four-quarter winners match luck.** Of 103 wallets active in every quarter, 8 were profitable to copy
+  in all four. Pure chance predicts 10.6.
+- No wallet passed the steadiness rule in both halves.
+
+All 8 four-quarter winners are paper-copied live: 5 were already tracked in `picks`/`control`,
+and the other 3 were added to `wallets.json` as group `win4`. The
+standout is 0xd93db9fc…ae3f (+30%, +9%, +51%, +38% by quarter, BTC correlation −0.26), but one such
+record among 214 wallets is what chance produces. Only the forward test can separate it from luck.
+
+## How the 8 four-quarter winners trade (`profiles.py`, 2026-11-13)
+- Two money-making styles. **Trend style**: wins under 40% of trips, but the average win is 5–8x the
+  average loss (0xd93db9fc mostly short; 0x05c6959d mostly PUMP). **Grind style**: wins 50–70% of trips
+  with small gains, and averages down often (57–71% of adds at a worse price) (0x2718f952, 0x5a750001,
+  0x512e1d1d). The grind style hides tail risk.
+- Big wallets execute with TWAP orders (65–81% of fills for 0xd93db9fc, 0x2718f952, 0x5a750001) and take
+  liquidity. Positions build over hours, so a 30-minute copier gets most of the move.
+- **Winners leave.** 0x05c6959d withdrew $599k on Oct 30, 0x5a750001 sent its money to other addresses
+  on Oct 9, and 0x4603444e has been idle since Sep 28. 0xd93db9fc made +$467k in the last 30 days,
+  withdrew $100k, and has held nothing since Nov 6.
+- 4 of the 5 still-active wallets lost money in the last 30 days (−$57k to −$120k).
+- 0x13d03265's PnL mostly comes from markets the copier doesn't follow (its main-exchange positions are tiny).
