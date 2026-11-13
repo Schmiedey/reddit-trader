@@ -64,7 +64,10 @@ jobs:
           if old_path.exists():
               old = json.loads(old_path.read_text())
               for aid, a in old.get("accounts", {}).items():
-                  b = new.get("accounts", {}).get(aid, {})
+                  b = new.get("accounts", {}).get(aid)
+                  if b is None:
+                      print(f"{aid}: account no longer exists in the service; dropping it from the ledger")
+                      continue
                   # never let a service that failed to restore overwrite a longer history
                   if len(b.get("orders", [])) < len(a["orders"]) or len(b.get("equity", [])) < len(a["equity"]):
                       raise SystemExit(f"{aid}: the service has less history than the saved ledger; not overwriting")
