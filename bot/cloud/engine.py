@@ -6,7 +6,7 @@ computed from Yahoo daily prices, so nothing here can place a real trade.
 Data:    Reddit posts from the keyless Arctic Shift archive (bot/sources/arctic.py).
 Signals: who BOUGHT what (bot/signals/stance.py), counted per stock over the last 5 trading days.
   - Early build-up: 4+ different buyers, at least double the 5 days before, price up < 10% in 5 days.
-  - Most bought:    5+ different buyers, and more buyers than sellers.
+  - Momentum:       2+ people talking, price at least double its 60-day low, daily range under 8%.
 Trades:  rules from config.yaml `trading:` (10% per trade, max 10 positions, 3 new a day, wide stop,
          sell at the open after 10 trading days). Buys and sells fill at the next market open.
 """
@@ -37,12 +37,15 @@ SUBS = ["wallstreetbets", "stocks", "investing", "StockMarket", "options"]  # th
 ACCOUNTS = {
     "buildup": {"name": "Early build-up", "rules": ("buildup",),
                 "blurb": "Buyers doubled versus the week before, and the price has not run yet."},
-    "mostbought": {"name": "Most bought", "rules": ("mostbought",),
-                   "blurb": "Five or more different buyers this week, and more buyers than sellers."},
+    "momentum": {"name": "Momentum", "rules": ("momentum",),
+                 "blurb": "Price only: a talked-about stock that has doubled from its 60-day low. Ignores who is buying."},
     "random": {"name": "Random Reddit names", "rules": ("random",),
-               "blurb": "Control: as many random 4+ buyer names as Most bought picks that day."},
+               "blurb": "Control: random stocks with 4+ buyers, as many as have 5+ buyers that day."},
 }
-RULE_NAMES = {"buildup": "Early build-up", "mostbought": "Most bought", "random": "Random pick"}
+RULE_NAMES = {"buildup": "Early build-up", "momentum": "Momentum", "random": "Random pick"}
+# Momentum (backtest round 10): 2+ people talking in 3 trading days, price at least double its 60-day low,
+# average daily range under 8%. The only buy-side lead the tournament found, and it uses no crowd opinion.
+MOM_TALKERS, MOM_UP60, MOM_MAX_ATR = 2, 1.0, 0.08
 BUILD_MIN, BUILD_RATIO, BUILD_MAX_RET5, MOST_MIN = 4, 2, 0.10, 5
 COOLDOWN = 10  # trading days. A signal is only bought on the day it first appears, then ignored this long.
 KEEP_DAYS = 40
@@ -145,14 +148,16 @@ class Engine:
     def features(self, now):
         """{ticker: crowd counts} from posts in the last 10 trading sessions (5 recent + 5 before)."""
         pump = {s.lower() for s in CFG["reddit"].get("pump_watch", [])}
-        c5, c10 = _cut(now, 5), _cut(now, 10)
-        b5, bprev, s5 = defaultdict(set), defaultdict(set), defaultdict(set)
+        c3, c5, c10 = _cut(now, 3), _cut(now, 5), _cut(now, 10)
+        b5, bprev, s5, talk = defaultdict(set), defaultdict(set), defaultdict(set), defaultdict(set)
         gain, loss = defaultdict(int), defaultdict(int)
         for r in self.con.execute("SELECT ticker, community, author, created, stance FROM stances "
-                                  "WHERE created > ? AND created <= ? AND stance != 'NONE'", (c10, now)):
+                                  "WHERE created > ? AND created <= ?", (c10, now)):
             if r["community"] in pump:
                 continue
             t, recent = r["ticker"], r["created"] > c5
+            if r["created"] > c3:
+                talk[t].add(r["author"])  # anyone posting about it, whatever they did
             if r["stance"] in ("BUY", "DD"):
                 (b5 if recent else bprev)[t].add(r["author"])
             elif recent and r["stance"] == "SELL":
@@ -164,8 +169,8 @@ class Engine:
         first = self.con.execute("SELECT MIN(created) FROM stances").fetchone()[0]
         warm10, warm5 = first is not None and first <= c10, first is not None and first <= c5
         return {t: {"buyers5": len(b5[t]), "buyers_prev5": len(bprev[t]) if warm10 else None, "sellers5": len(s5[t]),
-                    "gain5": gain[t], "loss5": loss[t], "warm5": warm5}
-                for t in set(b5) | set(s5) | set(gain) | set(loss)}
+                    "gain5": gain[t], "loss5": loss[t], "warm5": warm5, "talk3": len(talk[t])}
+                for t in set(b5) | set(s5) | set(gain) | set(loss) | {t for t, v in talk.items() if len(v) >= MOM_TALKERS}}
 
     # ---------- the evening run ----------
     def daily(self, now=None):
@@ -175,7 +180,8 @@ class Engine:
         day = today.isoformat()
         tc, sc, fc = CFG["trading"], CFG["scoring"], CFG["filter"]
         feats = self.features(now)
-        cands = sorted(t for t, f in feats.items() if f["buyers5"] >= BUILD_MIN and t not in FUNDS)  # SPY is the yardstick
+        cands = sorted(t for t, f in feats.items()  # SPY and other funds are never traded
+                       if (f["buyers5"] >= BUILD_MIN or f["talk3"] >= MOM_TALKERS) and t not in FUNDS)
         brokers = self.brokers()
         held_all = {s for b in brokers.values() for s in b.positions()} | {o["sym"] for b in brokers.values() for o in b.pending()}
         bars = self.bars_fn(self.con, set(cands) | held_all | {"SPY"}, today - timedelta(days=130))
@@ -193,16 +199,29 @@ class Engine:
                 blocked = "under 51 days of price history"
             else:
                 blocked = check({}, tb, fc)
+            hits = rule_hits(f, tech["ret5"]) if tech and not blocked else []
+            low60 = min((b["l"] for b in tb[-60:]), default=0)
+            up60 = tb[-1]["c"] / low60 - 1 if low60 > 0 else None
+            if (tech and not blocked and up60 is not None and f["talk3"] >= MOM_TALKERS and up60 >= MOM_UP60
+                    and (tech["atr_pct"] or 1) < MOM_MAX_ATR):
+                hits.append("momentum")
+            if f["buyers5"] < 2 and not hits:
+                continue  # only being talked about: not worth a line on the signal monitor
             rows.append({"ticker": t, **f, "price": tb[-1]["c"] if tb else None,
                          "ret5": round(tech["ret5"], 4) if tech else None, "atr": tech["atr_pct"] if tech else None,
-                         "hits": rule_hits(f, tech["ret5"]) if tech and not blocked else [], "blocked": blocked})
-        # Control account: each day, as many random eligible names as Most bought fires on (seeded by the date).
-        pool = [r for r in rows if r["ret5"] is not None and not r["blocked"]]
+                         "up60": round(up60, 3) if up60 is not None else None, "hits": hits, "blocked": blocked})
+        # Control account: each day, as many random 4+ buyer names as have 5+ buyers and more buyers than
+        # sellers (the old Most bought rule), seeded by the date.
+        pool = [r for r in rows if r["ret5"] is not None and not r["blocked"] and r["buyers5"] >= BUILD_MIN]
         n = sum("mostbought" in r["hits"] for r in pool)
         for r in random.Random(day).sample(pool, min(n, len(pool))):
             r["hits"].append("random")
-        rows += [{"ticker": t, **f, "price": None, "ret5": None, "atr": None, "hits": [], "blocked": None}
-                 for t, f in feats.items() if 2 <= f["buyers5"] < BUILD_MIN and t != "SPY"]
+        for r in rows:  # "mostbought" only sets the control's count; no account trades it any more
+            if "mostbought" in r["hits"]:
+                r["hits"].remove("mostbought")
+        cand_set = set(cands)
+        rows += [{"ticker": t, **f, "price": None, "ret5": None, "atr": None, "up60": None, "hits": [], "blocked": None}
+                 for t, f in feats.items() if 2 <= f["buyers5"] < BUILD_MIN and t not in FUNDS and t not in cand_set]
         rows.sort(key=lambda r: (-len(r["hits"]), -r["buyers5"], r["ticker"]))
         out = {}
         for aid, a in ACCOUNTS.items():
@@ -227,7 +246,8 @@ class Engine:
                 if last is None or np.busday_count(last, day) >= COOLDOWN:
                     marks[r["ticker"]] = day
                     r.setdefault("fresh", []).append(aid)
-                    signals[r["ticker"]] = {"ticker": r["ticker"], "score": round(0.5 + min(r["buyers5"], 49) / 100, 3),
+                    rank = r["talk3"] if a["rules"] == ("momentum",) else r["buyers5"]  # most-discussed first
+                    signals[r["ticker"]] = {"ticker": r["ticker"], "score": round(0.5 + min(rank, 49) / 100, 3),
                                             "agree": ["reddit"], "thin": False, "row": r}
             self.set("signal_days", {t: d for t, d in marks.items() if np.busday_count(d, day) < COOLDOWN}, con=acon)
             buys = []
@@ -239,8 +259,9 @@ class Engine:
                     continue
                 rule = next(h for h in r["hits"] if h in a["rules"])
                 prev = "" if r["buyers_prev5"] is None else f", up from {r['buyers_prev5']} the week before"
-                why = (f"{RULE_NAMES[rule]}: {r['buyers5']} buyers in 5 days{prev}, {r['sellers5']} sellers; "
-                       f"stop -{stop_pct:.0%}, sell after {tc['max_hold_days'] + 1} trading days")
+                what = (f"up {r['up60']:.0%} from its 60-day low, {r['talk3']} people talking" if rule == "momentum" else
+                        f"{r['buyers5']} buyers in 5 days{prev}, {r['sellers5']} sellers")
+                why = f"{RULE_NAMES[rule]}: {what}; stop -{stop_pct:.0%}, sell after {tc['max_hold_days'] + 1} trading days"
                 broker.queue(day, r["ticker"], "BUY", qty, why, stop_pct, take_pct)
                 buys.append(r["ticker"])
                 r.setdefault("bought", []).append(aid)

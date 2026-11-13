@@ -66,7 +66,10 @@ def build_rows(con, B, morning=True):
     n_t = defaultdict(int)
     for r in rows:
         n_t[r["post_id"]] += 1
-    F = defaultdict(lambda: defaultdict(lambda: {"M": set(), "B": set(), "S": set(), "W": 0, "L": 0, "dd": 0,
+    from ..signals.crowd import ensure_stances
+    ensure_stances(con)  # the same classification the live desk uses
+    stmap = {(r[0], r[1]): r[2] for r in con.execute("SELECT post_id, ticker, stance FROM stances")}
+    F = defaultdict(lambda: defaultdict(lambda: {"M": set(), "B": set(), "S": set(), "H": set(), "W": 0, "L": 0, "dd": 0,
                                                  "yolo": 0, "pen": 0, "n": 0}))
     core = defaultdict(int)
     for r in rows:
@@ -76,8 +79,7 @@ def build_rows(con, B, morning=True):
         i = bisect.bisect_right(cut, r["created"])
         if i >= n:
             continue
-        st, _ = stance_for(f"{r['title']}\n{r['body']}".strip(), r["ticker"], n_t[r["post_id"]], r["flair"],
-                           r["sentiment"] or 0.0)
+        st = stmap.get((r["post_id"], r["ticker"]))
         f = F[r["ticker"]][i]
         f["M"].add(r["author"])
         f["n"] += 1
@@ -87,6 +89,8 @@ def build_rows(con, B, morning=True):
             f["B"].add(r["author"])
         elif st == "SELL":
             f["S"].add(r["author"])
+        elif st == "HOLD":
+            f["H"].add(r["author"])
         elif st == "WON":
             f["W"] += 1
         elif st == "LOST":
@@ -142,7 +146,7 @@ def build_rows(con, B, morning=True):
                       for q, b in zip(tb[p - 14:p], tb[p - 13:p + 1])) / 14 / price
             prev = len(uni(i, 3, 12, "M"))
             nposts = tot(i, 0, 2, "n")
-            path = [(b["o"], b["h"], b["l"], b["c"]) for b in tb[p + 1:p + 11]]
+            path = [(b["o"], b["h"], b["l"], b["c"]) for b in tb[p + 1:p + 22]]
             o = path[0][0]
             if o <= 0:
                 continue
@@ -162,13 +166,19 @@ def build_rows(con, B, morning=True):
                 "ret1": c[-1] / c[-2] - 1, "ret5": c[-1] / c[-6] - 1, "ret20": c[-1] / c[-21] - 1,
                 "volx": tb[p]["v"] / v20 if v20 else 0, "atr": atr, "off60": price / hi60 - 1,
                 "up60": price / lo60 - 1 if lo60 > 0 else 0, "gap": o / price - 1,
-                "o_day": path[0][3] * (1 - slip) / entry - 1, "r3": hold(3), "r5": hold(5), "r10": hold(10),
+                "o_day": path[0][3] * (1 - slip) / entry - 1, "r3": hold(3), "r5": hold(5), "r10": hold(10), "r20": hold(20),
+                "b5": len(uni(i, 0, 4, "B")), "bp5": len(uni(i, 5, 9, "B")), "s5": len(uni(i, 0, 4, "S")),
+                "h5": len(uni(i, 0, 4, "H")),
                 "mfe5": max(b[1] for b in path[:5]) / entry - 1, "mae5": min(b[2] for b in path[:5]) / entry - 1,
             }
             for name, (tg, sp, h) in EXITS.items():
-                row[name] = exit_rule(o, path, tg, sp, h, slip) if len(path) >= min(h, 3) else float("nan")
+                row[name] = exit_rule(o, path[:10], tg, sp, h, slip) if len(path) >= min(h, 3) else float("nan")
             sp1 = bisect.bisect_left(B.dates["SPY"], dates[i + 1])
             row["spy5"] = spy[min(sp1 + 4, len(spy) - 1)]["c"] / spy[sp1]["o"] - 1
+            for h in (1, 3, 10, 20):  # SPY over the same holding period, for "did it beat the market?"
+                row[f"spy{h}"] = spy[sp1 + h - 1]["c"] / spy[sp1]["o"] - 1 if sp1 + h - 1 < len(spy) else float("nan")
+            row["spy_tr"] = spy[i]["c"] / (sum(b["c"] for b in spy[max(0, i - 49):i + 1]) / len(spy[max(0, i - 49):i + 1])) - 1
+            row["spy_r5"] = spy[i]["c"] / spy[i - 5]["c"] - 1 if i >= 5 else 0.0
             out.append(row)
     return out
 

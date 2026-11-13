@@ -352,3 +352,88 @@ comments including a rising market before it is worth an account. The download i
 
 Also found: the post history's top "tickers" include jargon that matches real symbols (RSI, ET, PR, IP,
 NASA, WTF). `comments_probe.JARGON` excludes them for comments; the post pipeline still counts them.
+
+## Round 10: a tournament of everything (2026-11-13)
+
+`uv run python -m bot.backtest.tournament [--max-atr 0.08]`. One table of every (stock, day) with 2+ people
+talking about it in 3 days, price $5+, $5M+ traded a day: 55,191 stock-days, 1,742 stocks, Aug 2024 – Nov 2026,
+using the same post classification as the live desk. Evening signal, bought at the next open, costs included.
+Everything is picked on the OLD days (to Dec 18 2025) and checked on the NEW days (Dec 19 2025 on). The yardstick
+is "vs others": the return minus the average talked-about stock bought the same day (random Reddit names).
+- 30 named strategies (the live rules, crowd ideas, plain price ideas), holds of 1, 5 and 10 days.
+- A mass search: every combination of up to 3 of 52 conditions (23,478 rules) x 7 exits = 164,346 strategies,
+  best and worst, repeated 3 times on outcomes shuffled within each day to count what luck alone produces.
+
+**First run, all $5+ stocks.**
+| | Real search | Shuffled (luck) |
+|---|---|---|
+| Buy rules that held on NEW days | 1,646 | 1,869 |
+| ...with t >= 2 on NEW days | 165 | 111 |
+| Losing rules that held | 22,424 | 1,626 |
+| ...with t <= -2 | 9,976 | 100 |
+No buy rule beat luck. Losing patterns were everywhere (next 10 days vs SPY, OLD / NEW): volume 5x normal
+−9.6% / −15.0%; jumped 15%+ yesterday −7.4% / −12.4%; new name with a 4x attention spike −11.2% / −16.4%;
+daily range 8%+ −5.0% / −7.5%; 40%+ below its 60-day high −5.6% / −10.1%.
+
+**A data problem this exposed.** Prices are split-adjusted, so a penny stock that later did a reverse split
+shows up as a $20–$140 stock (XTIA, RIME, WETO, LIMN, AIXI...). The losses are real but the live desk would
+have rejected those names on their actual price. Every earlier backtest and replay in this file used the same
+adjusted prices for its $5 filter, so they all let some of these in. By volatility (10-day hold vs SPY):
+range under 3% −0.2%, 3–5% −0.1%, 5–8% +0.2%, 8%+ **−6.0%** (2,684 trades, 36% winners).
+
+**Second run, ordinary stocks only (`--max-atr 0.08`, daily range under 8%).**
+- Any talked-about stock: +0.6% / +0.4% per 10 days, **0.0% / −0.1% vs SPY**. Reddit attention itself is worth nothing.
+- Named strategies: none passes. Early build-up +0.7% / +0.4% vs others (t 1.0 / 0.8), Most bought +0.6% / −0.8%,
+  bullish majority +1.2% / −0.1%, fade the crowd +0.8% / −0.1%, loss posts 3+ +0.9% / +1.8% (72 and 35 trades),
+  follow the winners +1.0% / +0.8% (t 1.8 / 0.9). Market uptrend or downtrend made no difference vs SPY.
+- Mass search: 3,076 buy rules held vs 382 by luck (165 vs 29 strict), mostly 10- and 20-day holds. They are
+  nearly all one thing: **momentum**. "Doubled off its 60-day low": 10-day hold +3.9% vs SPY OLD (345 trades,
+  t 2.2), +2.5% NEW (172 trades, t 1.7). It is a price pattern, not a Reddit one, and it is fragile: 53% winners,
+  median +1.0%, and without the best 5% of trades the average is +0.1%. The names are this period's AI and space
+  winners (NBIS, RKLB, PLTR, SNDK, ASTS, HOOD, MU).
+
+**What it means.** (1) Nothing built on who is buying or selling beats random Reddit names. (2) The one robust
+finding is what to avoid: extremely volatile, just-pumped names. (3) Momentum is the only buy-side lead, at t
+around 2 in a two-year bull market for those names. (4) The live desk has no volatility cap: its only guards are
+price and share volume, so a real $5+ stock in mid-pump can still be bought.
+
+### Round 10b: the volatility cap, checked in the engine itself (2026-11-13)
+
+The tournament holds every trade 10 days with no stop. The live desk has a stop (4 ATR, max 25%, then
+breakeven). Replaying the cloud engine with and without a cap of 8% average daily range:
+| Account | No cap: total / worst drop | With cap: total / worst drop |
+|---|---|---|
+| Early build-up | +46.7% / −26.8% | +28.5% / −18.1% |
+| Most bought | +17.6% / −25.5% | +7.6% / −21.3% |
+| Random Reddit names | +58.9% / −23.9% | +35.7% / −17.6% |
+
+Trade by trade in the uncapped replay, the 8%+ names were not the losers the tournament predicted: Early
+build-up 65 trades averaging +3.0% (the rest +1.4%), Random 74 at +1.3% (rest +2.4%), Most bought 48 at 0.0%
+(rest +1.5%). Pooled, +1.6% against +1.8%. The stop cuts off the −50% to −90% collapses that drive the
+tournament's average, and the winners are real (SOUN +74%, POET +82%, LUNR +79%, RGTI +64%).
+So for this desk the cap lowers the swings and does not raise the return. The totals fall by more than the
+removed trades explain because freeing a slot changes which other trades happen: the same ±20-point noise
+as Round 6. Decision: no cap. The live desk keeps its rules unchanged.
+
+## Round 11: Most bought replaced by a Momentum account (2026-11-13)
+
+Most bought is dropped (Round 8: its edge was a classifier artifact; it trails SPY and random names). The
+third account now trades the tournament's one buy-side lead: **Momentum** = 2+ people posting about the stock
+in 3 trading days, price at least double its 60-day low, average daily range under 8%. Most-discussed first,
+same sizing, stop and 10-day hold as the others. It ignores who is buying. The random control still draws as
+many 4+ buyer names as the old Most bought rule would have fired on.
+
+Replay of the cloud engine, Aug 15 2024 – Nov 12 2026 (SPY +40.5%):
+| Account | Total | Unseen year | Later 15 mo | Worst drop | Trades | Winners | Avg trade |
+|---|---|---|---|---|---|---|---|
+| Early build-up | +46.7% | +45.7% | +0.7% | −26.8% | 274 | 51% | +1.8% |
+| Momentum | **+286.6%** | +126.4% | +70.8% | −14.4% | 289 | 54% | +6.0% |
+| Random Reddit names | +58.9% | +66.6% | −4.6% | −23.9% | 288 | 54% | +2.1% |
+
+**Do not read +287% as what to expect.**
+- The rule was chosen from 164,346 strategies on this same data. This replay is the winner's in-sample result.
+- Ten trades made 65% of the profit; three made over +100% (IXHL +225%, CAR +187%, PACS +117%). The bars are
+  real, but IXHL and CAR were sold days before they collapsed, which is exit-timing luck. Median trade +1.8%;
+  without the best 5% of trades the average is +1.9%, about the same as the other accounts.
+- Two years of a bull market in exactly these names (NBIS, SNDK, RKLB, MU). No bear market in the sample.
+The live paper account and a long price-history test decide whether any of it is real.

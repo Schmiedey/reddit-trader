@@ -55,11 +55,13 @@ def test_engine_buys_fills_exits_and_survives_a_restart(tmp_path):
         return eng.daily(_ts(days[k], 16))
 
     assert evening(d0)["ok"]
-    for aid in ACCOUNTS:                                                              # both rules fire, and the random control draws the only eligible name
+    crowd = ("buildup", "random")                                                     # the rule fires, and the control draws the only eligible name
+    for aid in crowd:
         o = eng.acct(aid).execute("SELECT * FROM paper_orders").fetchall()
         assert len(o) == 1 and o[0]["sym"] == "NVDA" and o[0]["side"] == "BUY" and o[0]["status"] == "pending"
+    assert eng.acct("momentum").execute("SELECT COUNT(*) FROM paper_orders").fetchone()[0] == 0   # NVDA has not doubled
     cur["day"] = days[d0 + 1]
-    assert len(eng.morning_fills(_ts(days[d0 + 1], 9))["fills"]) == 3                 # filled at the next open
+    assert len(eng.morning_fills(_ts(days[d0 + 1], 9))["fills"]) == 2                 # filled at the next open
     pos = eng.acct("random").execute("SELECT * FROM paper_positions").fetchone()
     assert pos["entry_day"] == days[d0 + 1] and 9_000 < pos["qty"] * pos["entry_price"] <= 10_000   # 10% of $100k
     st = eng.state(_ts(days[d0 + 1], 12))
@@ -72,7 +74,7 @@ def test_engine_buys_fills_exits_and_survives_a_restart(tmp_path):
     assert eng.get("last_daily") == days[d0]
     for k in range(d0 + 1, d0 + 12):
         assert evening(k)["ok"]
-    for aid in ACCOUNTS:
+    for aid in crowd:
         c = eng.acct(aid)
         assert c.execute("SELECT COUNT(*) FROM paper_positions").fetchone()[0] == 0   # sold after 10 trading days
         sell = c.execute("SELECT * FROM paper_orders WHERE side='SELL' AND status='filled'").fetchone()
@@ -104,7 +106,7 @@ def test_due_work_schedule():
 
     at = lambda day, h, m=0: datetime.fromisoformat(day).replace(hour=h, minute=m, tzinfo=ET).timestamp()
     done = {"last_daily": "2026-11-12", "fills_day": None}
-    assert due(done, True, at("2026-11-13", 9, 0)) | {"evening_ts": 0} == {"evening_day": None, "evening_ts": 0, "same_day": False, "fills": False}
+    assert due(done, True, at("2026-11-13", 9, 0)) | {"evening_ts": 0} == {"evening_day": None, "evening_ts": 0, "same_day": False, "owed": 0, "fills": False}
     assert due(done, True, at("2026-11-13", 9, 45))["fills"]                       # Friday after the open
     assert not due({**done, "fills_day": "2026-11-13"}, True, at("2026-11-13", 10))["fills"]
     assert not due(done, False, at("2026-11-13", 10))["fills"]                     # nothing to fill
@@ -140,3 +142,39 @@ def test_new_classifier_rereads_the_archive(tmp_path, monkeypatch):
     eng2 = Engine(tmp_path / "c", park=False)
     eng2.load(eng.export())                                  # next restart: no second re-read
     assert stances_current(eng2.con)
+
+
+def test_momentum_account_buys_a_calm_stock_that_doubled(tmp_path):
+    days = _days(90)
+    d0 = 70
+    rise = [20.0] * 30 + [20 + 0.6 * i for i in range(60)]                       # 20 -> 44 by day 70: more than double its 60-day low
+    wild = [{**b, "h": b["c"] * 1.07, "l": b["c"] * 0.93} for b in _series(days, rise)]   # same climb, 14% daily range
+    bars = {"MOMO": _series(days, rise), "WILD": wild, "FLAT": _series(days, [50.0] * 90), "SPY": _series(days, [500 + 0.1 * i for i in range(90)])}
+    eng = Engine(tmp_path / "a", park=False, bars_fn=lambda _c, syms, since: {s: [b for b in bars[s] if b["d"] <= days[d0]] for s in syms if s in bars})
+    rows = [("old", "GME", "wallstreetbets", "x", _ts(days[d0 - 12]), "HOLD")]
+    for t in ("MOMO", "WILD", "FLAT"):                                           # two people talking, nobody says they bought
+        rows += [(f"{t}{i}", t, "wallstreetbets", f"u{i}", _ts(days[d0]), "NONE") for i in range(2)]
+    rows += [("solo", "MOMO", "pennystocks", "z", _ts(days[d0]), "NONE")]
+    eng.con.executemany("INSERT INTO stances VALUES(?,?,?,?,?,?)", rows)
+    eng.con.commit()
+    assert eng.features(_ts(days[d0], 16))["MOMO"]["talk3"] == 2                  # pump-watch subreddit not counted
+    assert eng.daily(_ts(days[d0], 16))["ok"]
+    assert [o["sym"] for o in eng.acct("momentum").execute("SELECT sym FROM paper_orders").fetchall()] == ["MOMO"]
+    for aid in ("buildup", "random"):                                            # no buyers: the crowd accounts stay out
+        assert eng.acct(aid).execute("SELECT COUNT(*) FROM paper_orders").fetchone()[0] == 0
+    assert [r["ticker"] for r in eng.get("signals")["rows"]] == ["MOMO"]         # talk-only names stay off the monitor
+
+
+def test_catch_up_on_every_missed_evening():
+    from bot.cloud.due import due, owed_evenings
+
+    at = lambda day, h, m=0: datetime.fromisoformat(day).replace(hour=h, minute=m, tzinfo=ET).timestamp()
+    meta = {"last_daily": "2026-11-10"}                                            # Tuesday was the last run
+    assert owed_evenings(meta, at("2026-11-13", 10)) == ["2026-11-11", "2026-11-12"]   # Friday morning
+    d = due(meta, False, at("2026-11-13", 10))
+    assert d["evening_day"] == "2026-11-11" and not d["same_day"] and d["owed"] == 2
+    assert datetime.fromtimestamp(d["evening_ts"], ET).strftime("%Y-%m-%d %H:%M") == "2026-11-11 16:35"
+    assert owed_evenings(meta, at("2026-11-16", 17)) == ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-16"]  # weekend skipped
+    assert owed_evenings({**meta, "skip_days": ["2026-11-11"]}, at("2026-11-13", 10)) == ["2026-11-12"]     # holiday
+    assert owed_evenings({}, at("2026-11-13", 10)) == ["2026-11-12"]               # new ledger: latest day only
+    assert owed_evenings({"last_daily": "2026-11-12"}, at("2026-11-13", 10)) == []
