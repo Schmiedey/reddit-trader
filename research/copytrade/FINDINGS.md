@@ -64,3 +64,24 @@ Each paper account starts at $10k, mirrors the wallet's leverage (capped at 5x t
 
 Limits: only runs while the Mac is awake (positions are held unchanged through gaps); funding payments,
 spot holdings and third-party perp markets (e.g. `xyz:` stocks/metals) are not copied.
+
+## Backtest of the live copier (2026-11-12)
+`backtest_live.py` replays `bot/copytrade/core.py` exactly (30-min checks, leverage mirrored and capped
+at 5x, 0.095% per side) over 2026-09-22 .. 2026-11-12. Wallet positions are rebuilt from public
+fills plus TWAP slice fills (the normal fills endpoint leaves TWAP slices out); 93% of coins matched
+the exchange's own recorded position. BTC fell 15.7% in the window.
+
+| group | n | mean | median | profitable | worst / best |
+|---|---|---|---|---|---|
+| **picks chosen as of Sep 22** (same rule, no lookahead) | 33 | **−10.1%** | −1.6% | 33% | −87% / +42% |
+| random control as of Sep 22 | 28 | −2.5% | 0.0% | 32% | |
+| current picks (chosen using this same period) | 48 | −0.5% | 0.0% | 42% | −62% / +95% |
+| current random control | 26 | −11.3% | −3.3% | 31% | |
+
+- **The honest test is the first pair:** the rule applied on Sep 22 picked wallets that did 7.5 points
+  *worse* than random (90% bootstrap range −17.8% .. +2.2%). The picks' equal-weight portfolio fell
+  steadily (−1, −2, −6, −7, −8% by week). The control ended near −1%.
+- The current picks only beat their control because the rule saw Aug–Nov results when choosing
+  them. That is lookahead, and even with it they made −0.5% after costs.
+- So the live forward test is expected to fail. It's still worth running, because 51 days in one
+  falling market is a small sample.

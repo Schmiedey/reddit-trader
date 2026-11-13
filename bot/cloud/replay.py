@@ -75,6 +75,7 @@ def summarize(eng, split="2025-08-14"):
             "big_wins": sum(r >= 0.10 for r in rets), "big_losses": sum(r <= -0.10 for r in rets),
             "months_pos": sum(v > 0 for v in mv), "months": len(mv), "avg_month": sum(mv) / len(mv), "worst_month": min(mv),
             "monthly": {m: round(v, 4) for m, v in months.items()},
+            "rets": [round(r, 4) for r in rets],
             "curve": [[d, round(e / c[0][1], 4), round(s / c[0][2], 4)] for d, e, s in c],
         }
     return out
