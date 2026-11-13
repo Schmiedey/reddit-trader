@@ -31,6 +31,35 @@ STATIC = Path(__file__).resolve().parent / "static"
 REPO = os.environ.get("GITHUB_REPO") or CFG["cloud"]["repo"]
 BRANCH = os.environ.get("LEDGER_BRANCH") or CFG["cloud"]["ledger_branch"]
 CACHE = {"state": b"{}", "ledger": None}
+COPY = {"body": None, "ts": 0.0, "busy": False, "lock": threading.Lock()}
+COPY_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/copy_ledger.json"
+
+
+def refresh_copy():
+    """Catch the copy desk up to now for the dashboard. The GitHub job saves the ledger, but GitHub
+    runs it only every few hours; the replay is deterministic, so this in-memory catch-up shows the
+    same numbers the next saved run will. Nothing here is saved."""
+    from ..copydesk import desk as copydesk
+    try:
+        with urllib.request.urlopen(f"{COPY_URL}?t={int(time.time())}", timeout=30) as r:
+            led = json.load(r)
+        COPY["body"] = json.dumps(led, separators=(",", ":")).encode()
+        led, _ = copydesk.run(led, int(time.time() * 1000))
+        COPY["body"] = json.dumps(led, separators=(",", ":")).encode()
+    except Exception as e:  # noqa: BLE001
+        print(f"copy desk catch-up failed: {type(e).__name__}: {e}", flush=True)
+    finally:
+        COPY["ts"], COPY["busy"] = time.time(), False
+
+
+def copy_body():
+    with COPY["lock"]:
+        if not COPY["busy"] and time.time() - COPY["ts"] > 600:
+            COPY["busy"] = True
+            threading.Thread(target=refresh_copy, daemon=True).start()
+    if COPY["body"] is None:
+        return None
+    return b'{"updating":' + (b"true" if COPY["busy"] else b"false") + b',"ledger":' + COPY["body"] + b"}"
 SELF_URL = os.environ.get("RENDER_EXTERNAL_URL")  # set by Render; absent when run locally
 BUDGET = float(CFG["cloud"].get("awake_budget_hours", 460))
 
@@ -247,6 +276,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, (STATIC / "copy.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/state":
             self._send(200, CACHE["state"])
+        elif path == "/api/copy":
+            body = copy_body()
+            self._send(200, body) if body else self._send(503, b'{"error":"loading","updating":true}')
         elif path == "/api/backtest":
             self._send(200, (STATIC / "backtest.json").read_bytes())
         elif path == "/api/ledger":

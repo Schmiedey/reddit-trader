@@ -87,7 +87,9 @@ svg text{fill:var(--tx3);font-size:11px}
   </ul></div></section>
 </main></div>
 <script>
-const URL_ = new URLSearchParams(location.search).get("ledger") || "https://raw.githubusercontent.com/Schmiedey/reddit-trader/paper-ledger/copy_ledger.json";
+const LOCAL = new URLSearchParams(location.search).get("ledger");
+const RAW = "https://raw.githubusercontent.com/Schmiedey/reddit-trader/paper-ledger/copy_ledger.json";
+let timer = null;
 const COL = {fast: "var(--s1)", slow: "var(--s2)", hourly: "var(--s3)"};
 const $ = id => document.getElementById(id);
 const usd = (v, d = 0) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: d, minimumFractionDigits: d});
@@ -148,13 +150,24 @@ function render(led) {
 }
 
 async function load() {
+  clearTimeout(timer);
+  let led = null, updating = false;
   try {
-    const r = await fetch(URL_ + "?t=" + Date.now(), {cache: "no-store"});
-    if (!r.ok) throw new Error(r.status === 404 ? "The copy desk has not saved its first ledger yet." : `Ledger request failed (HTTP ${r.status}).`);
-    render(await r.json()); $("err").style.display = "none";
-  } catch (e) { $("err").textContent = e.message; $("err").style.display = "block"; }
+    if (LOCAL) { const r = await fetch(LOCAL, {cache: "no-store"}); led = await r.json(); }
+    else {
+      const r = await fetch("/api/copy", {cache: "no-store"});
+      const j = await r.json();
+      updating = !!j.updating;
+      if (r.ok) led = j.ledger;
+      else { const g = await fetch(RAW + "?t=" + Date.now(), {cache: "no-store"}); if (g.ok) led = await g.json(); }
+    }
+    if (!led) throw new Error("The copy desk has not saved its first ledger yet.");
+    render(led); $("err").style.display = "none";
+    if (updating) $("meta").insertAdjacentHTML("beforeend", '<span><b>Catching up to now…</b></span>');
+  } catch (e) { $("err").textContent = e.message; $("err").style.display = "block"; updating = true; }
+  timer = setTimeout(load, updating ? 15000 : 5 * 60 * 1000);
 }
-load(); setInterval(load, 5 * 60 * 1000);
+load();
 </script>
 </body>
 </html>
