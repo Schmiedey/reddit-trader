@@ -1,15 +1,16 @@
 name: Run the paper desk
 
-# The Render service sleeps to stay inside the free plan's monthly hours. Every 30 minutes this
+# The Render service sleeps to stay inside the free plan's monthly hours. Every 10 minutes this
 # checks the saved ledger; if the morning fills or the evening trading run are owed, it wakes the
 # service, waits for it to finish, and commits the new ledger to the paper-ledger branch.
 # Uses only the built-in GITHUB_TOKEN. Set the repository variable APP_URL to the Render address.
 
 on:
   schedule:
-    - cron: "5,35 13-23 * * 1-5"   # 8 am to 7:35 pm New York (covers both daylight and standard time)
-    - cron: "5,35 0-2 * * 2-6"
-    - cron: "5 15 * * 0,6"         # one weekend check for a missed Friday run
+    # GitHub runs scheduled jobs late and skips many of them (in practice a few runs a day), so ask
+    # often, around the clock. A run that finds nothing owed exits in seconds without waking Render,
+    # and the service replays any trading day it missed when it does wake.
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
 
 permissions:

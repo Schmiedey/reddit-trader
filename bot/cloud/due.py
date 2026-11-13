@@ -9,7 +9,7 @@ the service calls the same function to decide what to do once awake.
 import json
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
@@ -24,17 +24,34 @@ def last_evening(now):
     return run.timestamp(), run.date().isoformat()
 
 
+def owed_evenings(meta, now, max_back=10):
+    """Every weekday whose evening run has not happened yet, oldest first. GitHub's scheduler can go
+    many hours (or a day) without waking the service, so a wake-up catches up on all of them in order."""
+    done = meta.get("last_daily") or ""
+    skips = set(meta.get("skip_days") or []) | {meta.get("skip_day")}
+    d, days = date.fromisoformat(last_evening(now)[1]), []
+    while len(days) < max_back and d.isoformat() > done:
+        if d.weekday() < 5 and d.isoformat() not in skips:
+            days.append(d.isoformat())
+        if not done:
+            break  # brand-new ledger: start with the latest day only
+        d -= timedelta(days=1)
+    return sorted(days)
+
+
 def due(meta, has_pending, now=None):
     """meta: the ledger's saved markers. Returns what should run now:
-    evening_day  the trading day whose evening run is still owed (today's, or a missed one), else None
+    evening_day  the oldest trading day whose evening run is still owed (today's or a missed one), else None
     fills        True when yesterday's orders should be filled at today's open"""
     now = now or time.time()
     et = datetime.fromtimestamp(now, ET)
     today, hm = et.date().isoformat(), et.hour * 60 + et.minute
-    ts, day = last_evening(now)
-    done = (meta.get("last_daily") or "") >= day or meta.get("skip_day") == day
-    deferred = meta.get("defer") == day and today == day  # no closing prices yet: try again tomorrow
-    return {"evening_day": None if done or deferred else day, "evening_ts": ts, "same_day": day == today,
+    owed = owed_evenings(meta, now)
+    if owed and owed[0] == today and meta.get("defer") == today:
+        owed = []  # no closing prices yet today: try again tomorrow
+    day = owed[0] if owed else None
+    ts = datetime.fromisoformat(day).replace(hour=16, minute=35, tzinfo=ET).timestamp() if day else None
+    return {"evening_day": day, "evening_ts": ts, "same_day": day == today, "owed": len(owed),
             "fills": et.weekday() < 5 and OPEN <= hm < CLOSE and bool(has_pending) and meta.get("fills_day") != today}
 
 

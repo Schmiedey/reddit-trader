@@ -87,7 +87,7 @@ class Runner:
     def work(self, now):
         """What is owed right now (see due.py)."""
         pending = any(b.pending() for b in self.eng.brokers().values())
-        meta = {k: self.eng.get(k) for k in ("last_daily", "skip_day", "defer", "fills_day")}
+        meta = {k: self.eng.get(k) for k in ("last_daily", "skip_day", "skip_days", "defer", "fills_day")}
         return due(meta, pending, now)
 
     def tick(self):
@@ -108,12 +108,18 @@ class Runner:
             if not self.collect(now)["failed"]:
                 self.snapshot()
         d = self.work(now)
-        if d["evening_day"] and now - self.t["daily"] >= 600:
-            self.t["daily"] = now
+        if d["evening_day"] and now >= self.t["daily_wait"]:
+            # One owed day per pass, oldest first, so a late wake-up replays every missed evening in order.
             day, same = d["evening_day"], d["same_day"]
-            if self.collect(now)["failed"] and same and hm < 19 * 60:
-                return self.publish(now, force=True)  # wait for Reddit; after 7pm ET trade on what we have
+            if now - (eng.get("collect_ok") or 0) > 1800 and self.collect(now)["failed"]:
+                self.t["collect_fails"] += 1
+                if self.t["collect_fails"] < 3 and not (same and hm >= 19 * 60):
+                    self.t["daily_wait"] = now + 600  # wait for Reddit; after 3 tries (or 7pm ET) use what we have
+                    return self.publish(now, force=True)
+            self.t["collect_fails"] = 0
             res = eng.daily(now if same else d["evening_ts"])
+            if not same and res["ok"]:
+                self.say("evening", f"Caught up on the missed trading run for {day}")
             if res["ok"]:
                 for aid, r in res["accounts"].items():
                     for e in r["events"]:
@@ -125,8 +131,10 @@ class Runner:
                 eng.set("defer", day)
                 self.say("evening", "No closing prices for today yet. Trying again tomorrow morning.", ok=False)
                 self.snapshot()
-            elif not same:
-                eng.set("skip_day", day)
+            elif same:
+                self.t["daily_wait"] = now + 600  # closing prices not published yet
+            else:
+                eng.set("skip_days", ((eng.get("skip_days") or []) + [day])[-30:])
                 self.say("evening", f"The market was closed on {day}: no trading run")
                 self.snapshot()
             d = self.work(now)
