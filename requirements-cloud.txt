@@ -1,0 +1,10 @@
+# Only what the Render service (bot/cloud) needs. The local bot's extras live in pyproject.toml.
+httpx>=0.27
+numpy>=1.26
+pandas>=2.2
+psutil>=5.9
+python-dotenv>=1.0
+pyyaml>=6.0
+tzdata>=2024.1
+vadersentiment>=3.3.2
+yfinance>=0.2.50

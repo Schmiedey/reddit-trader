@@ -1,0 +1,9 @@
+.git
+.venv
+data
+research
+tests
+scripts
+**/__pycache__
+.pytest_cache
+.claude

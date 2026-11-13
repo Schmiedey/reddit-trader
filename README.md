@@ -1,8 +1,33 @@
-# Reddit paper-trading bot
+# Reddit crowd desk (paper trading)
 
-Reads Reddit, X, StockTwits and news; trusts people by how often they've actually beaten
-the S&P 500; paper trades swing positions with fake money in a local account.
-No API keys. Not investment advice.
+Three $100,000 **paper** accounts follow what people on Reddit say they are buying, each with its
+own rule, to see which rule beats the S&P 500. No broker is connected: nothing here can place a
+real trade. Not investment advice.
+
+## The cloud desk (what runs now)
+Runs on Render's free plan from `bot/cloud/` (Docker, `render.yaml`).
+- **Data:** posts from r/wallstreetbets, stocks, investing, StockMarket and options through the
+  keyless Arctic Shift archive. No login, no API key, no browser.
+- **Signals:** a parser reads what each author did (bought, sold, won, lost), then counts different
+  buyers per stock over 5 trading days. *Early build-up*: 4+ buyers, double the week before, price
+  up under 10%. *Most bought*: 5+ buyers and more buyers than sellers.
+- **Trades:** buy at the next open with 10% of the account, max 10 stocks, 3 new a day, wide stop,
+  sell at the open after 10 trading days.
+- **Schedule:** `.github/workflows/desk.yml` checks every 30 minutes whether the morning fills or the
+  evening run are owed, wakes the service, and saves the ledger to the `paper-ledger` branch. The
+  service sleeps in between to stay inside Render's free hours.
+- **Dashboard:** `/` on the service. Results, holdings, the crowd board, how it works, and the backtest.
+
+```bash
+PORT=8792 LEDGER_RESTORE=0 uv run python -m bot.cloud.app   # run the desk locally
+uv run python -m bot.cloud.replay                           # replay it over 27 months of history
+uv run pytest -q
+```
+Backtest results and their limits: [BACKTEST.md](BACKTEST.md).
+
+# The original local bot
+The first version ran on a Mac with launchd and a browser-based collector. It is kept for the
+research tooling (`bot/backtest/`) and is no longer the live system.
 
 ## Run it
 ```bash

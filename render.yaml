@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: reddit-trader
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: 8792
+      # The paper ledger lives on the paper-ledger branch of this public repo (the free disk is wiped
+      # on every restart). No secrets: .github/workflows/desk.yml saves it, the app restores it on boot.
+      - key: GITHUB_REPO
+        value: Schmiedey/reddit-trader
+      - key: LEDGER_BRANCH
+        value: paper-ledger

@@ -72,3 +72,8 @@ paper:
 
 runtime:
   cpu_limit_pct: 10
+
+cloud:                             # the Render service (bot/cloud): three paper accounts, no broker
+  park_idle_cash_in_spy: false     # tested 2026-11-12: +2 to +14 pts over 27 months, but drops up to 9 pts deeper
+  repo: Schmiedey/reddit-trader    # the paper ledger is saved to a branch of this public repo
+  ledger_branch: paper-ledger

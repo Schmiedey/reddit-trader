@@ -46,6 +46,12 @@ class LocalPaperBroker:
 
     def process(self, bars):
         """Fill pending orders and trigger stops/targets using bars. Returns a list of fill messages."""
+        events = self.fill_orders(bars) + self.check_stops(bars)
+        self.con.commit()
+        return events
+
+    def fill_orders(self, bars):
+        """Fill pending orders at the open of the first bar after the order day."""
         slip = self.pc["slippage_pct"]
         events = []
         for o in self.pending():
@@ -78,6 +84,12 @@ class LocalPaperBroker:
             self.con.execute("UPDATE paper_orders SET status='filled', fill_day=?, fill_price=?, qty=? WHERE id=?",
                              (b["d"], price, qty if o["side"] == "BUY" else held["qty"], o["id"]))
 
+        self.con.commit()
+        return events
+
+    def check_stops(self, bars):
+        """Trigger stops and targets on every bar not checked yet (needs finished daily bars)."""
+        events = []
         for pos in self.positions().values():
             last_checked, stop, entry = pos["checked_day"], pos["stop"], pos["entry_price"]
             for b in bars.get(pos["sym"], []):

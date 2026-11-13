@@ -205,7 +205,33 @@ What this changes: the edge is real enough to keep testing but smaller than the 
 year and averaged −0.1% in the replay.** I did not change the live rules after seeing this, since
 retuning on the same data is what broke the capitulation rule. The live paper results decide next.
 
-## What the live bot does now (`scoring.strategy: crowd_swing`, `bot/signals/crowd.py`)
+## Round 6: the cloud desk, three accounts side by side (2026-11-12)
+
+Loss bounce is dropped (it lost on the unseen year). The Render service (`bot/cloud`) runs three
+$100k paper accounts: **Early build-up**, **Most bought** (5+ different buyers in 5 trading days, more
+buyers than sellers) and **Both**. A signal is bought only on the first day it fires, then ignored
+for 10 trading days, which is how the Round 3-5 simulations counted signals.
+
+Replay of the cloud engine itself (`uv run python -m bot.cloud.replay`), Aug 15 2024 – Nov 12 2026:
+| Account | Aug 2024 – Aug 2025 (SPY +18.1%) | Aug 2025 – Nov 2026 (SPY +19.0%) | All 27 months (SPY +40.5%) | Worst drop | Trades | Winners | Avg trade |
+|---|---|---|---|---|---|---|---|
+| Early build-up | +36.3% | −2.1% | +33.4% | −31.1% | 429 | 52% | +0.8% |
+| Most bought | +75.5% | +11.2% | +95.2% | −24.5% | 388 | 55% | +2.1% |
+| Both | +40.2% | −0.4% | +39.6% | −30.9% | 455 | 49% | +1.0% |
+
+- All three beat SPY in the first year. **None beat SPY in the most recent 15 months.**
+- The totals move a lot with small implementation details. Buying a signal every day it stays on,
+  instead of only the first day, changed Most bought from +95% to +64% and Both from +40% to +79%.
+  With ~400 trades averaging +1 to +2%, differences of ±20 points are noise. The live paper test,
+  not this table, decides which rule is kept.
+- **Idle cash in SPY** (`cloud.park_idle_cash_in_spy`): totals +45.2% / +99.9% / +56.3%, so +5 to +17
+  points, but worst drops of −35.7% / −33.3% / −32.0% and Most bought did worse in the first year.
+  Left **off** so the accounts measure the Reddit signals alone; SPY is the yardstick on the dashboard.
+- Live and backtest differ in one known way: moderators later remove about a third of WSB posts and
+  most r/stocks posts. The history only has those posts' titles. The live desk re-reads the last
+  48 hours each evening and drops removed text, which narrows but does not close that gap.
+
+## The earlier local bot (`scoring.strategy: crowd_swing`, `bot/signals/crowd.py`), replaced by the cloud desk
 1. **Loss bounce (first priority):** 3+ Loss-flair posts on a stock in 5 trading days, losses ≥ 65% of
    its gain+loss posts (`scoring.loss_rule: bounce`).
 2. **Early build-up:** 4+ distinct buyers in 5 trading days, at least double the 5 days before, price

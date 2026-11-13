@@ -1,0 +1,77 @@
+name: Run the paper desk
+
+# The Render service sleeps to stay inside the free plan's monthly hours. Every 30 minutes this
+# checks the saved ledger; if the morning fills or the evening trading run are owed, it wakes the
+# service, waits for it to finish, and commits the new ledger to the paper-ledger branch.
+# Uses only the built-in GITHUB_TOKEN. Set the repository variable APP_URL to the Render address.
+
+on:
+  schedule:
+    - cron: "5,35 13-23 * * 1-5"   # 8 am to 7:35 pm New York (covers both daylight and standard time)
+    - cron: "5,35 0-2 * * 2-6"
+    - cron: "5 15 * * 0,6"         # one weekend check for a missed Friday run
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desk
+  cancel-in-progress: false
+
+jobs:
+  desk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: bot/cloud/due.py
+      - uses: actions/checkout@v4
+        with:
+          ref: paper-ledger
+          path: led
+
+      - name: Is any work owed?
+        id: due
+        run: |
+          if [ -z "$APP_URL" ]; then echo "APP_URL is not set yet"; echo "wake=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "wake=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python3 src/bot/cloud/due.py led/ledger.json | tee -a "$GITHUB_OUTPUT"
+
+      - name: Wake the service and wait for it to finish
+        if: steps.due.outputs.wake == '1'
+        run: |
+          for i in $(seq 1 20); do curl -sf --max-time 60 "$APP_URL/healthz" >/dev/null && break; sleep 15; done
+          for i in $(seq 1 60); do
+            idle=$(curl -sf --max-time 30 "$APP_URL/api/state" | python3 -c "import json,sys; print(json.load(sys.stdin).get('boot',{}).get('idle'))" 2>/dev/null || true)
+            echo "check $i: idle=$idle"
+            [ "$idle" = "True" ] && break
+            sleep 30
+          done
+
+      - name: Save the ledger
+        if: steps.due.outputs.wake == '1'
+        run: |
+          curl -sf --retry 3 --retry-delay 10 --max-time 60 "$APP_URL/api/ledger" -o /tmp/ledger.json || { echo "ledger not ready"; exit 0; }
+          python3 - <<'PY'
+          import json, pathlib
+          new = json.load(open("/tmp/ledger.json"))
+          old_path = pathlib.Path("led/ledger.json")
+          if old_path.exists():
+              old = json.loads(old_path.read_text())
+              for aid, a in old.get("accounts", {}).items():
+                  b = new.get("accounts", {}).get(aid, {})
+                  # never let a service that failed to restore overwrite a longer history
+                  if len(b.get("orders", [])) < len(a["orders"]) or len(b.get("equity", [])) < len(a["equity"]):
+                      raise SystemExit(f"{aid}: the service has less history than the saved ledger; not overwriting")
+          old_path.write_text(json.dumps(new, separators=(",", ":")))
+          PY
+          cd led
+          git config user.name "paper-desk"
+          git config user.email "actions@users.noreply.github.com"
+          git add ledger.json
+          git diff --cached --quiet || { git commit -q -m "paper ledger $(date -u +%FT%RZ)"; git push -q; echo "ledger saved"; }

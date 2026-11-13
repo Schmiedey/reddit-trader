@@ -41,11 +41,11 @@ def _frame_for(df, sym):
     return None
 
 
-def daily_bars(con, symbols, start):
-    """Daily OHLCV since `start` (date). {sym: [{"d","o","h","l","c","v"}]} oldest first. Cached 6h."""
+def daily_bars(con, symbols, start, ttl=6 * 3600):
+    """Daily OHLCV since `start` (date). {sym: [{"d","o","h","l","c","v"}]} oldest first. Cached 6h (ttl=0: never)."""
     syms = sorted(set(symbols))
     key = f"yf:{','.join(syms)}:{start}"
-    hit = cache_get(con, key, ttl=6 * 3600)
+    hit = cache_get(con, key, ttl=ttl) if ttl else None
     if hit is not None:
         return hit
     import yfinance as yf
@@ -68,5 +68,6 @@ def daily_bars(con, symbols, start):
                  "l": float(r.Low), "c": float(r.Close), "v": float(r.Volume)}
                 for idx, r in f.iterrows()
             ]
-    cache_put(con, key, out)
+    if ttl:
+        cache_put(con, key, out)
     return out

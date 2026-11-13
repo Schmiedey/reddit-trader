@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reddit crowd desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --plane:#edf0f3; --surface:#ffffff; --ink:#0f1b2d; --ink2:#47546a; --muted:#6f7b8e; --grid:#e3e7ed; --axis:#c5ccd6;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --spy:#7a8597;
+  --up:#006300; --down:#b42318; --hi:#ffe45c; --hi-ink:#0f1b2d; --warn-bg:#fff4d6; --chip:#f1f4f7;
+  --display:"Bricolage Grotesque","DM Sans",system-ui,sans-serif; --text:"DM Sans",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --plane:#0b111b; --surface:#151d2b; --ink:#eef1f5; --ink2:#b4bdcb; --muted:#8a96a9; --grid:#232d3d; --axis:#3a475b;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --spy:#8a96a9;
+  --up:#3ccf6e; --down:#ff8577; --hi:#ffe45c; --hi-ink:#0f1b2d; --warn-bg:#3a2f10; --chip:#1d2737;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--plane);color:var(--ink);font:400 15px/1.5 var(--text);font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(28px,4.2vw,44px);font-weight:700;line-height:1.05}
+h2{font-size:24px;font-weight:700;line-height:1.15}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+a{color:inherit}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+header.top{padding:28px 0 18px}
+.brandrow{display:flex;gap:16px 28px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.lede{color:var(--ink2);max-width:58ch;margin-top:8px;font-size:16px}
+.paper{display:inline-block;background:var(--hi);color:var(--hi-ink);font-weight:700;padding:1px 8px;border-radius:3px;transform:rotate(-1.2deg)}
+.status{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:18px;padding:12px 0;border-top:1px solid var(--axis);border-bottom:1px solid var(--axis);color:var(--ink2);font-size:14px}
+.status b{color:var(--ink);font-weight:500}
+.status .bad b{color:var(--down)}
+.banner{background:var(--warn-bg);border-radius:8px;padding:12px 14px;margin-top:14px;display:none}
+section{margin:30px 0}
+.sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sec-head p{color:var(--ink2);max-width:64ch;margin-top:4px}
+.card{background:var(--surface);border-radius:12px;padding:18px}
+.muted{color:var(--muted)} .up{color:var(--up)} .down{color:var(--down)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* who is ahead */
+.race{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:18px}
+@media (max-width:900px){.race{grid-template-columns:1fr}}
+.seg{display:inline-flex;background:var(--chip);border-radius:8px;padding:3px}
+.seg button{border:0;background:none;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--ink2)}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:0 0 0 1px var(--axis)}
+.chart{position:relative;min-height:320px}
+.chart svg{display:block;width:100%;height:320px;overflow:visible}
+.chart .note{color:var(--ink2);font-size:14px;margin-top:8px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.45;white-space:nowrap;display:none;z-index:3}
+.tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.tip .d{opacity:.75;margin-bottom:2px}
+.accts{display:flex;flex-direction:column;gap:10px}
+.acct{border-left:4px solid var(--c);padding:6px 0 8px 14px}
+.acct .nm{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.acct .val{font:700 26px/1.1 var(--display)}
+.acct .line{color:var(--ink2);font-size:14px;margin-top:2px}
+.acct.spy{border-left-style:dashed}
+.acct.spy .val{font-size:18px}
+
+/* crowd board */
+.board{width:100%;border-collapse:collapse}
+.board th{text-align:left;font-weight:500;color:var(--muted);font-size:13px;padding:0 10px 8px 0;border-bottom:1px solid var(--axis)}
+.board td{padding:10px 10px 10px 0;border-bottom:1px solid var(--grid);vertical-align:top}
+.board tr:last-child td{border-bottom:0}
+.tk{font:700 17px/1.2 var(--display)}
+.dots{display:flex;flex-wrap:wrap;gap:3px;align-items:center;min-height:14px}
+.dots i{width:10px;height:10px;border-radius:50%;background:var(--ink);display:block}
+.dots.prev i{background:none;box-shadow:inset 0 0 0 1.5px var(--muted)}
+.dots .n{margin-left:5px;font-size:13px;color:var(--ink2)}
+.dotrow{display:grid;grid-template-columns:86px 1fr;gap:4px 8px;align-items:center;font-size:13px;color:var(--muted)}
+.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 10px;font-size:13px;margin:0 4px 4px 0;white-space:nowrap}
+.chip.on{background:var(--ink);color:var(--surface)}
+.who i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.who span{white-space:nowrap;margin-right:10px;font-size:14px}
+.scroll{overflow-x:auto}
+.more{margin-top:10px;border:1px solid var(--axis);background:none;border-radius:8px;padding:6px 12px;cursor:pointer}
+
+/* tables */
+table.t{width:100%;border-collapse:collapse;min-width:640px}
+table.t th{text-align:left;font-weight:500;color:var(--muted);font-size:13px;padding:0 12px 8px 0;border-bottom:1px solid var(--axis);white-space:nowrap}
+table.t td{padding:9px 12px 9px 0;border-bottom:1px solid var(--grid);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t .r{text-align:right}
+.why{color:var(--ink2);font-size:13px;max-width:44ch}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:var(--c)}
+.bar{height:6px;border-radius:3px;background:var(--grid);width:84px;overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--ink2);border-radius:3px}
+.two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{border:1px solid var(--axis);background:none;border-radius:999px;padding:5px 12px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.list{list-style:none;margin:0;padding:0}
+.list li{padding:9px 0;border-bottom:1px solid var(--grid)}
+.list li:last-child{border-bottom:0}
+.list .when{color:var(--muted);font-size:13px}
+.empty{color:var(--ink2);padding:6px 0}
+
+/* how it works */
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;counter-reset:s}
+@media (max-width:1000px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.steps{grid-template-columns:1fr}}
+.step{background:var(--surface);border-radius:12px;padding:16px;counter-increment:s;display:flex;flex-direction:column;gap:10px}
+.step h3::before{content:counter(s) ". "}
+.step p{color:var(--ink2);font-size:14px}
+.viz{margin-top:auto;padding-top:6px}
+.post{background:var(--chip);border-radius:8px;padding:7px 9px;font-size:13px;margin-top:6px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.tag{font-weight:700;font-size:12px;border-radius:4px;padding:1px 6px;background:var(--ink);color:var(--surface);white-space:nowrap}
+.tag.o{background:none;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--axis)}
+.tl{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;font-size:12px;color:var(--ink2)}
+.tl .track{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,var(--ink2) 0 8%,transparent 8% 10%)}
+.foot{color:var(--muted);font-size:13px;padding:8px 0 40px;max-width:80ch}
+@media (prefers-reduced-motion:no-preference){.acct .val{transition:color .3s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div class="brandrow">
+    <div>
+      <h1>Reddit crowd desk</h1>
+      <p class="lede">Three accounts follow what people on Reddit say they are buying, each with its own rule, so we can see which rule earns its keep. All of it is <span class="paper">paper money</span></p>
+    </div>
+  </div>
+  <div class="status" id="status" aria-live="polite"><span>Loading the latest numbers</span></div>
+  <div class="banner" id="banner" role="alert"></div>
+</header>
+
+<section aria-labelledby="h-race">
+  <div class="sec-head">
+    <div><h2 id="h-race">Who is ahead</h2><p id="race-sub">Each account started with $100,000. The dashed line is the S&amp;P 500 (SPY) over the same days.</p></div>
+    <div class="seg" role="group" aria-label="Chart period">
+      <button id="b-live" aria-pressed="true">Live paper results</button><button id="b-replay" aria-pressed="false">27-month replay</button>
+    </div>
+  </div>
+  <div class="race">
+    <div class="card"><div class="chart" id="chart"></div><p class="note muted" id="chart-note"></p></div>
+    <div class="card"><div class="accts" id="accts"></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h-crowd">
+  <div class="sec-head"><div><h2 id="h-crowd">What Reddit is buying</h2>
+    <p>One dot is one person who posted that they bought the stock. Filled dots are the last 5 trading days; hollow dots are the 5 days before.</p></div>
+    <span class="muted" id="crowd-day"></span></div>
+  <div class="card scroll"><table class="board" id="board"></table><button class="more" id="more" hidden>Show every stock</button></div>
+</section>
+
+<section aria-labelledby="h-book">
+  <div class="sec-head"><div><h2 id="h-book">What the accounts hold</h2><p>Every position is sold at the open after 10 trading days, or earlier if it falls to its stop.</p></div></div>
+  <div class="two">
+    <div class="card"><div class="tabs" id="tabs" role="group" aria-label="Account"></div><div class="scroll" id="positions"></div></div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="card"><h3>Orders for the next open</h3><ul class="list" id="orders"></ul></div>
+      <div class="card"><h3>What the desk did lately</h3><ul class="list" id="activity"></ul></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-trades">
+  <div class="sec-head"><div><h2 id="h-trades">Finished trades</h2><p id="trades-sub"></p></div></div>
+  <div class="card scroll" id="trades"></div>
+</section>
+
+<section aria-labelledby="h-how">
+  <div class="sec-head"><div><h2 id="h-how">How it works</h2><p>The same five steps run every trading day, with no person in the loop.</p></div></div>
+  <div class="steps">
+    <div class="step"><h3>Read Reddit</h3><p>After each market close the desk reads the day's new posts from five stock subreddits through a public archive. No login.</p>
+      <div class="viz" id="viz-subs"></div></div>
+    <div class="step"><h3>Work out what each person did</h3><p>It ignores how excited a post sounds and looks for what the author did: bought, sold, or posted a win or loss.</p>
+      <div class="viz"><div class="post"><span>“Loaded 200 shares of NVDA”</span><span class="tag">Bought</span></div>
+        <div class="post"><span>“Took profits on AMD today”</span><span class="tag o">Sold</span></div>
+        <div class="post"><span>“Should I buy TSLA here?”</span><span class="tag o">Ignored</span></div></div></div>
+    <div class="step"><h3>Count the buyers</h3><p>For each stock it counts how many different people bought in the last 5 trading days, and in the 5 before.</p>
+      <div class="viz"><div class="dotrow"><span>This week</span><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span class="n">8</span></div>
+        <span>Week before</span><div class="dots prev"><i></i><i></i><i></i><span class="n">3</span></div></div></div></div>
+    <div class="step"><h3>Check the two signals</h3><p>A stock only counts on the first day a signal fires. It must also cost $5 or more and trade 1M+ shares a day.</p>
+      <div class="viz"><div class="post"><span><b>Early build-up</b><br>4+ buyers, double last week, price up under 10%</span></div>
+        <div class="post"><span><b>Most bought</b><br>5+ buyers, and more buyers than sellers</span></div></div></div>
+    <div class="step"><h3>Trade on paper</h3><p id="rules-text">Buy at the next open with 10% of the account. Sell at the open 10 trading days later.</p>
+      <div class="viz"><div class="tl"><span>Buy</span><div class="track" aria-hidden="true"></div><span>Sell</span></div>
+        <p class="muted" style="font-size:12px;margin-top:6px" id="rules-small">10 trading days. A stop sells sooner if the price falls too far.</p></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h-proof">
+  <div class="sec-head"><div><h2 id="h-proof">What 27 months of history say</h2>
+    <p>This exact program was replayed one day at a time over Aug 2024 to Nov 2026, seeing only what it could have seen each day. It is a backtest, not a promise.</p></div></div>
+  <div class="card scroll" id="proof"></div>
+</section>
+
+<p class="foot">Paper money only. No broker is connected, so this desk cannot place a real trade. Prices come from Yahoo Finance and can lag. Nothing here is investment advice.</p>
+</div>
+
+<script>
+const ACC = ["buildup","mostbought","both"];
+const COL = {buildup:"var(--s1)", mostbought:"var(--s2)", both:"var(--s3)", spy:"var(--spy)"};
+const TZ = "America/New_York";
+let S = null, BT = null, mode = "live", tab = "buildup", showAll = false;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = (v, d=0) => v == null ? "–" : (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d});
+const pct = (v, d=1) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(d) + "%";
+const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+const day = d => d ? new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {month:"short", day:"numeric", timeZone:"UTC"}) : "–";
+const dayY = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {month:"short", year:"numeric", timeZone:"UTC"});
+const clock = ts => ts ? new Date(ts * 1000).toLocaleString("en-US", {weekday:"short", hour:"numeric", minute:"2-digit", timeZone:TZ}) + " ET" : "–";
+function ago(ts){ if(!ts) return "never"; const m = Math.max(0, Math.round((Date.now()/1000 - ts)/60));
+  return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " d ago"; }
+
+/* ---------- line chart with crosshair ---------- */
+function lineChart(el, series, opt){
+  const W = Math.max(320, el.clientWidth), H = 320, m = {t:14, r:118, b:28, l:46};
+  const xs = series[0].pts.map(p => p[0]), n = xs.length;
+  const all = series.flatMap(s => s.pts.map(p => p[1]));
+  let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+  if (hi - lo < 0.02) { hi += 0.01; lo -= 0.01; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const X = i => m.l + (n < 2 ? 0 : i * (W - m.l - m.r) / (n - 1)), Y = v => m.t + (hi - v) * (H - m.t - m.b) / (hi - lo);
+  const step = [0.005,0.01,0.02,0.05,0.1,0.2,0.25,0.5,1].find(s => (hi - lo) / s <= 6) || 1;
+  let g = "";
+  for (let v = Math.ceil(lo/step)*step; v <= hi; v += step) {
+    const z = Math.abs(v) < 1e-9;
+    g += `<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--${z?"axis":"grid"})" stroke-width="1"/>` +
+         `<text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="12" fill="var(--muted)">${pct(z?0:v,step<0.01?1:0)}</text>`;
+  }
+  const ticks = Math.min(n, W < 560 ? 4 : 6); let xl = "";
+  for (let k = 0; k < ticks; k++) { const i = ticks < 2 ? 0 : Math.round(k * (n - 1) / (ticks - 1));
+    xl += `<text x="${X(i)}" y="${H-6}" text-anchor="${k===0?"start":k===ticks-1?"end":"middle"}" font-size="12" fill="var(--muted)">${esc(opt.xfmt(xs[i]))}</text>`; }
+  let marks = "";
+  if (opt.split) { const i = xs.findIndex(d => d >= opt.split); if (i > 0) marks =
+    `<line x1="${X(i)}" x2="${X(i)}" y1="${m.t}" y2="${H-m.b}" stroke="var(--axis)" stroke-dasharray="3 4"/>` +
+    `<text x="${X(i)-8}" y="${m.t+10}" text-anchor="end" font-size="12" fill="var(--muted)">year the rules never saw</text>` +
+    `<text x="${X(i)+8}" y="${m.t+10}" font-size="12" fill="var(--muted)">later months</text>`; }
+  const paths = series.map(s => `<path d="${s.pts.map((p,i) => (i?"L":"M") + X(i).toFixed(1) + " " + Y(p[1]).toFixed(1)).join("")}" fill="none" stroke="${s.color}" stroke-width="${s.dash?1.5:2}" ${s.dash?'stroke-dasharray="5 4"':""} stroke-linejoin="round" stroke-linecap="round"/>`).join("");
+  const ends = series.map(s => ({s, y: Y(s.pts[n-1][1])})).sort((a,b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i-1].y < 17) ends[i].y = ends[i-1].y + 17;
+  const over = ends.length ? ends[ends.length-1].y - (H - m.b) : 0; if (over > 0) ends.forEach(e => e.y -= over);
+  const labels = ends.map(e => `<circle cx="${X(n-1)}" cy="${Y(e.s.pts[n-1][1])}" r="4" fill="${e.s.color}" stroke="var(--surface)" stroke-width="2"/>` +
+    `<text x="${W-m.r+12}" y="${e.y+4}" font-size="12" fill="var(--ink)">${esc(e.s.short)} ${pct(e.s.pts[n-1][1], 1)}</text>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.label)}">${g}${marks}${paths}${xl}${labels}
+    <g id="cx" style="display:none"><line y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" stroke-width="1"/>${series.map((s,i) => `<circle r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2" data-i="${i}"/>`).join("")}</g>
+    <rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="hit"/></svg><div class="tip"></div>`;
+  const cx = el.querySelector("#cx"), tip = el.querySelector(".tip"), hit = el.querySelector("#hit");
+  const move = ev => { const r = el.querySelector("svg").getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(n-1, Math.round((px - m.l) / ((W - m.l - m.r) / Math.max(1, n-1)))));
+    cx.style.display = ""; cx.querySelector("line").setAttribute("x1", X(i)); cx.querySelector("line").setAttribute("x2", X(i));
+    cx.querySelectorAll("circle").forEach(c => { const s = series[+c.dataset.i]; c.setAttribute("cx", X(i)); c.setAttribute("cy", Y(s.pts[i][1])); });
+    tip.innerHTML = `<div class="d">${esc(opt.tfmt(xs[i]))}</div>` + [...series].sort((a,b) => b.pts[i][1] - a.pts[i][1]).map(s =>
+      `<div><i style="background:${s.color}"></i>${esc(s.name)} <b>${pct(s.pts[i][1], 1)}</b></div>`).join("");
+    tip.style.display = "block"; const left = X(i) * r.width / W;
+    tip.style.left = Math.min(Math.max(0, left + 12), el.clientWidth - tip.offsetWidth) + "px"; tip.style.top = "8px"; };
+  hit.addEventListener("pointermove", move); hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointerleave", () => { cx.style.display = "none"; tip.style.display = "none"; });
+}
+
+function drawChart(){
+  const el = $("chart"), note = $("chart-note");
+  if (mode === "replay") {
+    if (!BT) { el.innerHTML = '<p class="empty">Loading the replay</p>'; return; }
+    const series = ACC.map(id => ({name: BT.plain[id].name, short: BT.plain[id].name, color: COL[id], pts: BT.plain[id].curve.map(r => [r[0], r[1] - 1])}));
+    series.push({name: "S&P 500 (SPY)", short: "SPY", color: COL.spy, dash: true, pts: BT.plain.buildup.curve.map(r => [r[0], r[2] - 1])});
+    lineChart(el, series, {xfmt: dayY, tfmt: d => day(d) + ", " + d.slice(0,4), split: BT.split, label: "Backtest replay of the three accounts and SPY"});
+    note.textContent = "Backtest replay, not live results. Gain since Aug 15, 2024.";
+    $("race-sub").textContent = "The same three rules replayed over 27 months of Reddit history, each starting with $100,000.";
+    return;
+  }
+  $("race-sub").innerHTML = "Each account started with $100,000. The dashed line is the S&amp;P 500 (SPY) over the same days.";
+  const a0 = S.accounts[0];
+  const live = S.prices_ts && new Date(S.prices_ts * 1000).toLocaleDateString("en-CA", {timeZone: TZ}) > a0.curve[a0.curve.length-1][0];
+  const series = S.accounts.map(a => ({name: a.name, short: a.name, color: COL[a.id],
+    pts: a.curve.map(r => [r[0], r[1] / a.start - 1]).concat(live ? [["now", a.ret]] : [])}));
+  const spy0 = a0.curve[0][2];
+  series.push({name: "S&P 500 (SPY)", short: "SPY", color: COL.spy, dash: true, pts: a0.curve.map(r => [r[0], r[2] / spy0 - 1]).concat(live ? [["now", a0.spy_ret]] : [])});
+  if (series[0].pts.length < 2) { el.innerHTML = '<p class="empty">Live results start with the first buys, which fill at the next market open. The line appears here after that. Until then, the 27-month replay shows how these rules did on history.</p>'; note.textContent = ""; return; }
+  const f = d => d === "now" ? "Now" : day(d);
+  lineChart(el, series, {xfmt: f, tfmt: f, label: "Live paper results of the three accounts and SPY"});
+  const n = a0.curve.length;
+  note.textContent = n < 10 ? `Only ${n} trading day${n === 1 ? "" : "s"} of live results so far. The 27-month replay shows how these rules did on history.` : "Gain since the first trading day.";
+}
+
+/* ---------- sections ---------- */
+function drawStatus(){
+  const c = S.collect || {}, failed = (c.failed || []).length, stale = false;
+  $("status").innerHTML =
+    `<span><b>Paper money only</b>, no broker connected</span>` +
+    `<span class="${stale || failed ? "bad" : ""}">Reddit read <b>${ago(c.ts)}</b>${failed ? ", " + failed + " subreddit" + (failed > 1 ? "s" : "") + " waiting on the archive" : ""}</span>` +
+    `<span>Posts with a stock in the last day <b>${S.data.posts_24h}</b></span>` +
+    `<span>Prices from <b>${clock(S.prices_ts)}</b></span>` +
+    `<span>Last trading run <b>${S.last_daily ? day(S.last_daily) : "none yet"}</b></span>` +
+    `<span>Next trading run <b>${clock(S.next_evening)}</b></span>`;
+  const b = $("banner"), r = S.boot && S.boot.restore;
+  if (r === "error" || r === "pending") { b.style.display = "block"; b.textContent = "Trading is paused: the saved ledger has not loaded yet. The desk retries every minute and will not trade until it loads."; }
+  else if (!S.data.warm) { b.style.display = "block"; b.textContent = "Still collecting its first two weeks of Reddit posts. The early build-up signal stays off until then."; }
+  else b.style.display = "none";
+}
+
+function drawAccounts(){
+  const spy = S.accounts[0].spy_ret;
+  $("accts").innerHTML = S.accounts.map(a => { const edge = a.ret - a.spy_ret;
+    return `<div class="acct" style="--c:${COL[a.id]}"><div class="nm"><h3>${esc(a.name)}</h3><span class="num ${cls(a.ret)}">${pct(a.ret, 2)}</span></div>
+      <div class="val num">${money(a.value)}</div>
+      <div class="line">${a.curve.length ? `<span class="${cls(edge)}">${pct(edge, 2)}</span> against SPY` : "Starts at the next open"}, ${a.positions.length} stock${a.positions.length === 1 ? "" : "s"} held, ${money(a.cash)} cash</div>
+      <div class="line">${esc(a.blurb)}</div></div>`; }).join("") +
+    `<div class="acct spy" style="--c:${COL.spy}"><div class="nm"><h3>S&amp;P 500 (SPY)</h3><span class="num ${cls(spy)}">${pct(spy, 2)}</span></div>
+      <div class="line">The yardstick. An account only earns its keep if it beats this.</div></div>`;
+}
+
+function dots(n, prev){ const k = Math.min(n, 30); return `<div class="dots${prev ? " prev" : ""}">${"<i></i>".repeat(k)}<span class="n">${n}${n > k ? " (30 shown)" : ""}</span></div>`; }
+function drawBoard(){
+  const sig = S.signals, rows = sig.rows || [];
+  $("crowd-day").textContent = sig.day ? "As of the close on " + day(sig.day) : "";
+  if (!rows.length) { $("board").innerHTML = '<tr><td class="empty">No trading run yet. The board fills in after the next market close.</td></tr>'; $("more").hidden = true; return; }
+  const top = showAll ? rows : rows.slice(0, 10);
+  const name = id => S.accounts.find(a => a.id === id).name;
+  $("board").innerHTML = `<thead><tr><th>Stock</th><th>People who bought</th><th>Sellers</th><th>5-day price</th><th>Signal</th><th>What the desk did</th></tr></thead><tbody>` + top.map(r => {
+    const hits = r.hits || [], bought = r.bought || [], fresh = r.fresh || [];
+    let did = '<span class="muted">Watching. Not enough buyers yet.</span>';
+    if (r.blocked) did = `<span class="muted">Skipped: ${esc(r.blocked)}</span>`;
+    else if (bought.length) did = `<div class="who">${bought.map(id => `<span><i style="background:${COL[id]}"></i>${esc(name(id))}</span>`).join("")}</div><span class="muted">buying at the next open</span>`;
+    else if (fresh.length) did = '<span class="muted">New signal, but the account was full or already holds it</span>';
+    else if (hits.length) did = '<span class="muted">Signal still on. Only the first day counts.</span>';
+    else if (r.price != null) did = '<span class="muted">Watching. No signal.</span>';
+    return `<tr><td><div class="tk">${esc(r.ticker)}</div>${r.price != null ? `<span class="muted num">${money(r.price, 2)}</span>` : ""}</td>
+      <td><div class="dotrow"><span>This week</span>${dots(r.buyers5)}<span>Week before</span>${r.buyers_prev5 == null ? '<span>not enough history</span>' : dots(r.buyers_prev5, true)}</div></td>
+      <td class="num">${r.sellers5}</td><td class="num ${cls(r.ret5)}">${pct(r.ret5)}</td>
+      <td>${["buildup","mostbought"].map(h => `<span class="chip${hits.includes(h) ? " on" : ""}">${h === "buildup" ? "Early build-up" : "Most bought"}</span>`).join("")}</td>
+      <td>${did}</td></tr>`; }).join("") + "</tbody>";
+  $("more").hidden = rows.length <= 10; $("more").textContent = showAll ? "Show the top 10" : `Show all ${rows.length} stocks`;
+}
+
+function drawBook(){
+  $("tabs").innerHTML = S.accounts.map(a => `<button aria-pressed="${a.id === tab}" data-id="${a.id}"><span class="sw" style="--c:${COL[a.id]}"></span>${esc(a.name)} (${a.positions.length})</button>`).join("");
+  const a = S.accounts.find(x => x.id === tab);
+  $("positions").innerHTML = a.positions.length ? `<table class="t"><thead><tr><th>Stock</th><th class="r">Shares</th><th class="r">Bought at</th><th class="r">Now</th><th class="r">Gain or loss</th><th>Days held</th><th>Why it was bought</th></tr></thead><tbody>` +
+    a.positions.map(p => `<tr><td><b>${esc(p.sym)}</b><br><span class="muted">${day(p.entry_day)}</span></td><td class="r num">${p.qty}</td><td class="r num">${money(p.entry, 2)}</td><td class="r num">${money(p.last, 2)}</td>
+      <td class="r num ${cls(p.pnl)}">${money(p.pnl)}<br>${pct(p.pnl_pct)}</td>
+      <td class="num">${p.days_held} of ${S.rules.hold_days}<div class="bar"><i style="width:${Math.min(100, p.days_held / S.rules.hold_days * 100)}%"></i></div><span class="muted" style="font-size:13px">stop ${money(p.stop, 2)}</span></td>
+      <td class="why">${esc(p.reason.split(";")[0])}</td></tr>`).join("") + "</tbody></table>"
+    : `<p class="empty">${a.pending.length ? "Nothing held yet. Its first orders fill at the next market open." : "Nothing held right now. It buys when a new signal fires."}</p>`;
+  const orders = S.accounts.flatMap(a => a.pending.map(o => ({...o, a})));
+  $("orders").innerHTML = orders.length ? orders.map(o => `<li><span class="sw" style="--c:${COL[o.a.id]}"></span><b>${o.side === "BUY" ? "Buy" : "Sell"} ${o.qty} ${esc(o.sym)}</b> <span class="muted">${esc(o.a.name)}</span><div class="why">${esc(o.reason.split(";")[0])}</div></li>`).join("")
+    : '<li class="empty">No orders waiting.</li>';
+  const act = S.activity || [];
+  $("activity").innerHTML = act.length ? act.slice(0, 9).map(x => `<li><span class="${x.ok ? "" : "down"}">${esc(x.msg)}</span><div class="when">${clock(x.ts)}</div></li>`).join("") : '<li class="empty">Nothing yet.</li>';
+}
+
+function drawTrades(){
+  const all = S.accounts.flatMap(a => a.trades.map(t => ({...t, a}))).sort((x, y) => y.out_day.localeCompare(x.out_day)).slice(0, 60);
+  $("trades-sub").innerHTML = S.accounts.map(a => { const s = a.stats; return `<span class="sw" style="--c:${COL[a.id]}"></span>${esc(a.name)}: ${s.closed ? `${s.wins} of ${s.closed} won, average ${pct(s.avg)}` : "none yet"}`; }).join(" &nbsp; ");
+  $("trades").innerHTML = all.length ? `<table class="t"><thead><tr><th>Account</th><th>Stock</th><th>Bought</th><th>Sold</th><th class="r">Result</th><th class="r">Dollars</th><th>How it ended</th></tr></thead><tbody>` +
+    all.map(t => `<tr><td><span class="sw" style="--c:${COL[t.a.id]}"></span>${esc(t.a.name)}</td><td><b>${esc(t.sym)}</b></td><td class="num">${day(t.in_day)} at ${money(t.entry, 2)}</td><td class="num">${day(t.out_day)} at ${money(t.exit, 2)}</td>
+      <td class="r num ${cls(t.ret)}">${pct(t.ret)}</td><td class="r num ${cls(t.pnl)}">${money(t.pnl)}</td><td class="why">${esc(t.why_out)}</td></tr>`).join("") + "</tbody></table>"
+    : '<p class="empty">No trade has finished yet. The first ones close about two weeks after the first buys.</p>';
+}
+
+function drawProof(){
+  if (!BT) return;
+  const row = (r, c) => `<tr><td><span class="sw" style="--c:${c}"></span>${esc(r.name)}</td>
+    <td class="r num ${cls(r.first[0] - r.first[1])}">${pct(r.first[0])}</td><td class="r num ${cls(r.second[0] - r.second[1])}">${pct(r.second[0])}</td>
+    <td class="r num"><b>${pct(r.total)}</b></td><td class="r num">${pct(r.dd)}</td><td class="r num">${r.trades}</td><td class="r num">${Math.round(r.win * 100)}%</td><td class="r num">${pct(r.avg)}</td>
+    <td class="r num">${r.months_pos} of ${r.months}</td></tr>`;
+  const p = BT.plain, s = p.buildup;
+  $("proof").innerHTML = `<table class="t"><thead><tr><th>Account</th><th class="r">Aug 2024 to Aug 2025</th><th class="r">Aug 2025 to Nov 2026</th><th class="r">All 27 months</th><th class="r">Worst drop</th><th class="r">Trades</th><th class="r">Winners</th><th class="r">Average trade</th><th class="r">Months up</th></tr></thead><tbody>` +
+    ACC.map(id => row(p[id], COL[id])).join("") +
+    `<tr><td><span class="sw" style="--c:${COL.spy}"></span>S&amp;P 500 (SPY)</td><td class="r num">${pct(s.first[1])}</td><td class="r num">${pct(s.second[1])}</td><td class="r num"><b>${pct(s.spy)}</b></td><td class="r num muted" colspan="5" style="text-align:left;padding-left:16px">Green means the account beat SPY in that period; red means it did not.</td></tr></tbody></table>
+    <p class="why" style="max-width:86ch;margin-top:12px">All three beat SPY in the first year and none did in the most recent 15 months. That is why this runs on paper first.</p>`;
+}
+
+function drawRules(){
+  const r = S.rules;
+  $("viz-subs").innerHTML = r.subs.map(s => `<span class="chip">r/${esc(s)}</span>`).join("");
+  $("rules-text").textContent = `Buy at the next open with ${Math.round(r.position_pct * 100)}% of the account. Hold at most ${r.max_positions} stocks and add at most ${r.max_new_per_day} a day.`;
+  $("rules-small").textContent = `${r.hold_days} trading days, then sell at the open. A stop sells sooner if the price falls up to ${Math.round(r.max_stop_pct * 100)}%.`;
+}
+
+function draw(){ if (!S || !S.accounts) return; drawStatus(); drawAccounts(); drawChart(); drawBoard(); drawBook(); drawTrades(); drawRules(); drawProof(); }
+let first = true;
+async function load(){ try { const r = await fetch("/api/state", {cache: "no-store"}); const s = await r.json(); if (!s.accounts) return;
+  S = s; if (first) { first = false; if (s.accounts[0].curve.length < 2) setMode("replay"); } draw(); } catch (e) {} }
+function setMode(m){ mode = m; $("b-live").setAttribute("aria-pressed", m === "live"); $("b-replay").setAttribute("aria-pressed", m === "replay"); if (S) drawChart(); }
+$("b-live").onclick = () => setMode("live"); $("b-replay").onclick = () => setMode("replay");
+$("tabs").onclick = e => { const b = e.target.closest("button"); if (b) { tab = b.dataset.id; drawBook(); } };
+$("more").onclick = () => { showAll = !showAll; drawBoard(); };
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => S && drawChart(), 150); });
+fetch("/api/backtest").then(r => r.json()).then(b => { BT = b; if (S) { drawProof(); if (mode === "replay") drawChart(); } }).catch(() => {});
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>
