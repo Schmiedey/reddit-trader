@@ -76,4 +76,5 @@ runtime:
 cloud:                             # the Render service (bot/cloud): three paper accounts, no broker
   park_idle_cash_in_spy: false     # tested 2026-11-12: +2 to +14 pts over 27 months, but drops up to 9 pts deeper
   repo: Schmiedey/reddit-trader    # the paper ledger is saved to a branch of this public repo
+  awake_budget_hours: 460          # this service's monthly cap; the free plan's 750 h are shared (kalshi-bot ~200 h)
   ledger_branch: paper-ledger

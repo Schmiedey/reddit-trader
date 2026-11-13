@@ -178,3 +178,42 @@ def test_catch_up_on_every_missed_evening():
     assert owed_evenings({**meta, "skip_days": ["2026-11-11"]}, at("2026-11-13", 10)) == ["2026-11-12"]     # holiday
     assert owed_evenings({}, at("2026-11-13", 10)) == ["2026-11-12"]               # new ledger: latest day only
     assert owed_evenings({"last_daily": "2026-11-12"}, at("2026-11-13", 10)) == []
+
+
+def test_keep_awake_schedule():
+    from bot.cloud.due import want_awake
+
+    at = lambda day, h, m=0: datetime.fromisoformat(day).replace(hour=h, minute=m, tzinfo=ET).timestamp()
+    w = lambda ts, owed=False, unsaved=False, hours=0: want_awake(ts, owed, unsaved, hours, 460)
+    assert w(at("2026-11-16", 3)) and w(at("2026-11-18", 23, 59))          # Monday night, Wednesday night
+    assert w(at("2026-11-20", 19, 59)) and not w(at("2026-11-20", 20, 1))  # Friday until 8 pm
+    assert not w(at("2026-11-21", 12)) and not w(at("2026-11-22", 17))     # Saturday, Sunday afternoon
+    assert w(at("2026-11-22", 18, 30))                                     # Sunday evening
+    assert w(at("2026-11-21", 12), unsaved=True)                           # weekend, ledger not on GitHub yet
+    assert not w(at("2026-11-18", 12), hours=460)                          # over the monthly cap...
+    assert w(at("2026-11-18", 12), owed=True, hours=500)                   # ...but owed work still runs
+
+
+def test_runner_tracks_saved_ledger_and_hours(tmp_path, monkeypatch):
+    import json as _json
+    from bot.cloud import app
+    from bot.cloud.engine import Engine
+
+    r = app.Runner()
+    r.eng = Engine(tmp_path, park=False, bars_fn=lambda *_: {})
+    r.snapshot()
+    assert r.snap_ts > r.saved_ts                                          # fresh snapshot, not on GitHub yet
+
+    class Resp:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, *a): return self.body
+    monkeypatch.setattr(app.urllib.request, "urlopen",
+                        lambda *a, **k: Resp(_json.dumps({"saved": r.snap_ts}).encode()))
+    r.check_saved(r.snap_ts + 700)
+    assert r.saved_ts == r.snap_ts                                         # GitHub caught up
+    t0 = r.snap_ts
+    for k in range(1, 30):
+        r.track_awake(t0 + 15 * k)
+    assert 0.1 < r.month_hours(t0) + r.awake_acc / 3600 < 0.13             # ~7 minutes counted

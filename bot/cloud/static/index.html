@@ -318,7 +318,9 @@ function drawMeta(){
   const r = S.boot && S.boot.restore, bad = r === "error" || r === "pending", c = S.collect || {}, f = (c.failed || []).length;
   $("meta").innerHTML = `<span><span class="dot${bad ? " bad" : ""}"></span>${bad ? "Paused" : "Running"}</span>` +
     `<span>Last run <b>${S.last_daily ? day(S.last_daily) : "–"}</b></span><span>Next run <b>${clock(S.next_evening)}</b></span>` +
-    `<span>Prices <b>${clock(S.prices_ts)}</b></span><span>Reddit <b>${clock(c.ts)}</b>${f ? ` <span class="dn">(${f} subreddit${f > 1 ? "s" : ""} failed)</span>` : ""}</span>`;
+    `<span>Prices <b>${clock(S.prices_ts)}</b></span><span>Reddit <b>${clock(c.ts)}</b>${f ? ` <span class="dn">(${f} subreddit${f > 1 ? "s" : ""} failed)</span>` : ""}</span>` +
+    (S.awake ? `<span title="Saved to the paper-ledger branch on GitHub">Ledger saved <b>${S.awake.unsaved ? "pending" : clock(S.awake.saved)}</b></span>` +
+      `<span title="Render free-plan hours this service used this month, and its cap">Hours <b>${Math.round(S.awake.hours)} / ${Math.round(S.awake.budget)}</b></span>` : "");
   const a = $("alert");
   if (bad) { a.style.display = "block"; a.textContent = "Trading is paused because the saved ledger has not loaded. The service retries every minute and will not trade until it does."; }
   else if (!S.data.warm) { a.style.display = "block"; a.textContent = "Less than two weeks of Reddit history collected. Early build-up stays off until the prior-week comparison is available."; }

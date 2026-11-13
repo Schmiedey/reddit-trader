@@ -55,6 +55,30 @@ def due(meta, has_pending, now=None):
             "fills": et.weekday() < 5 and OPEN <= hm < CLOSE and bool(has_pending) and meta.get("fills_day") != today}
 
 
+def want_awake(now, owed, unsaved, hours_this_month, budget):
+    """Should the service keep itself awake (ping itself) right now?
+
+    Render's free plan puts a service to sleep after 15 minutes without requests, and GitHub's
+    scheduler is too unreliable to wake it on time. So the service stays awake through the trading
+    week (Sunday 6 pm to Friday 8 pm New York time) and does its own timing. It also stays awake while
+    work is owed or its latest ledger has not been saved to GitHub yet. Past `budget` hours in a
+    month (the free plan's 750 hours are shared with other services) it only stays up for owed work.
+    """
+    if owed:
+        return True
+    if hours_this_month >= budget:
+        return False
+    if unsaved:
+        return True
+    et = datetime.fromtimestamp(now, ET)
+    wd, hm = et.weekday(), et.hour * 60 + et.minute
+    if wd <= 3:
+        return True                # Monday to Thursday, all day and night
+    if wd == 4:
+        return hm < 20 * 60        # Friday until 8 pm
+    return wd == 6 and hm >= 18 * 60   # Sunday from 6 pm; Saturday asleep
+
+
 if __name__ == "__main__":
     try:
         led = json.load(open(sys.argv[1]))

@@ -24,13 +24,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ..config import CFG
-from .due import GIVE_UP, due
+from .due import GIVE_UP, due, want_awake
 from .engine import ACCOUNTS, ET, Engine
 
 STATIC = Path(__file__).resolve().parent / "static"
 REPO = os.environ.get("GITHUB_REPO") or CFG["cloud"]["repo"]
 BRANCH = os.environ.get("LEDGER_BRANCH") or CFG["cloud"]["ledger_branch"]
 CACHE = {"state": b"{}", "ledger": None}
+SELF_URL = os.environ.get("RENDER_EXTERNAL_URL")  # set by Render; absent when run locally
+BUDGET = float(CFG["cloud"].get("awake_budget_hours", 460))
 
 
 def next_evening(now):
@@ -48,6 +50,10 @@ class Runner:
         self.started = time.time()
         self.eng = None
         self.idle = False
+        self.want = True        # keep-awake decision, read by the pinger thread
+        self.snap_ts = 0.0      # when the ledger snapshot served at /api/ledger was taken
+        self.saved_ts = 0.0     # the newest snapshot GitHub is known to hold
+        self.awake_acc = 0.0    # seconds awake not yet added to the monthly total
 
     def say(self, kind, msg, ok=True):
         print(f"{datetime.now(ET):%Y-%m-%d %H:%M:%S} ET [{kind}] {msg}", flush=True)
@@ -55,7 +61,45 @@ class Runner:
         self.eng.set("activity", ([{"ts": time.time(), "kind": kind, "msg": msg, "ok": ok}] + log)[:40])
 
     def snapshot(self):
-        CACHE["ledger"] = json.dumps(self.eng.export(), separators=(",", ":")).encode()
+        led = self.eng.export()
+        self.snap_ts = led["saved"]
+        CACHE["ledger"] = json.dumps(led, separators=(",", ":")).encode()
+
+    def check_saved(self, now):
+        """Has GitHub's paper-ledger branch caught up with our latest snapshot? Anonymous read."""
+        if self.snap_ts <= self.saved_ts or now - self.t["saved_check"] < 600:
+            return
+        self.t["saved_check"] = now
+        try:
+            url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/ledger.json?t={int(now)}"
+            with urllib.request.urlopen(url, timeout=30) as r:
+                self.saved_ts = max(self.saved_ts, float(json.load(r).get("saved") or 0))
+        except Exception as e:
+            print(f"saved-ledger check failed: {type(e).__name__}", flush=True)
+
+    def track_awake(self, now):
+        """Count this service's awake hours per month, to stay inside the shared free-plan hours."""
+        dt = now - (self.t["awake_tick"] or now)
+        self.t["awake_tick"] = now
+        if 0 < dt < 120:
+            self.awake_acc += dt
+        if self.awake_acc >= 300:
+            hours = self.eng.get("awake_hours") or {}
+            month = datetime.fromtimestamp(now, ET).strftime("%Y-%m")
+            hours = {m: h for m, h in hours.items() if m >= (datetime.fromtimestamp(now, ET) - timedelta(days=62)).strftime("%Y-%m")}
+            hours[month] = round(hours.get(month, 0.0) + self.awake_acc / 3600, 3)
+            self.eng.set("awake_hours", hours)
+            self.awake_acc = 0.0
+
+    def month_hours(self, now):
+        return (self.eng.get("awake_hours") or {}).get(datetime.fromtimestamp(now, ET).strftime("%Y-%m"), 0.0)
+
+    def decide_awake(self, now, d):
+        want = want_awake(now, bool(d["evening_day"] or d["fills"]), self.snap_ts > self.saved_ts,
+                          self.month_hours(now), BUDGET)
+        if want != self.want and self.t["state"]:
+            self.say("keepalive", "Staying awake" if want else "Allowed to sleep until the next wake-up")
+        self.want = want
 
     def try_restore(self):
         url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/ledger.json"
@@ -74,6 +118,7 @@ class Runner:
         self.eng.load(led)
         self.restore = "ok"
         self.snapshot()
+        self.saved_ts = self.snap_ts  # same content as the copy on GitHub
         self.say("start", "Service restarted and restored its paper ledger")
 
     def collect(self, now):
@@ -150,6 +195,9 @@ class Runner:
             self.t["mark"] = now
             eng.mark(now)
         self.set_idle(now)
+        self.track_awake(now)
+        self.check_saved(now)
+        self.decide_awake(now, self.work(now))
         self.publish(now)
 
     def set_idle(self, now):
@@ -162,7 +210,9 @@ class Runner:
         self.t["state"] = now
         st = self.eng.state(now)
         st.update(activity=self.eng.get("activity") or [], next_evening=next_evening(now),
-                  boot={"restore": self.restore, "started": self.started, "idle": self.idle})
+                  boot={"restore": self.restore, "started": self.started, "idle": self.idle},
+                  awake={"keep": self.want, "hours": round(self.month_hours(now) + self.awake_acc / 3600, 1),
+                         "budget": BUDGET, "saved": self.saved_ts or None, "unsaved": self.snap_ts > self.saved_ts})
         CACHE["state"] = json.dumps(st, separators=(",", ":")).encode()
 
     def run(self):
@@ -210,8 +260,23 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def pinger(runner):
+    """Keep the Render service awake by requesting its own public address (Render counts it as traffic)."""
+    if not SELF_URL:
+        return
+    while True:
+        time.sleep(540)
+        if runner.want:
+            try:
+                urllib.request.urlopen(f"{SELF_URL.rstrip('/')}/healthz", timeout=30).read()
+            except Exception as e:
+                print(f"keep-awake ping failed: {type(e).__name__}", flush=True)
+
+
 def main():
-    threading.Thread(target=Runner().run, daemon=True).start()
+    runner = Runner()
+    threading.Thread(target=runner.run, daemon=True).start()
+    threading.Thread(target=pinger, args=(runner,), daemon=True).start()
     port = int(os.environ.get("PORT", "8792"))
     print(f"dashboard on :{port} (paper trading only; ledger branch {REPO}@{BRANCH})", flush=True)
     ThreadingHTTPServer((os.environ.get("HOST", "0.0.0.0"), port), Handler).serve_forever()
