@@ -101,6 +101,7 @@ class Runner:
             if self.restore in ("pending", "error"):
                 return
         if not self.t["state"]:
+            self.set_idle(now)
             self.publish(now)  # show the dashboard before any slow work
         if self.restore == "none" and CACHE["ledger"] is None and now - self.t["first"] >= 600:
             self.t["first"] = now  # brand-new service: gather two weeks of posts, then save the first ledger
@@ -140,9 +141,12 @@ class Runner:
         if now - self.t["mark"] >= 900 and now - ((eng.get("prices") or {}).get("ts") or 0) > 900:
             self.t["mark"] = now
             eng.mark(now)
+        self.set_idle(now)
+        self.publish(now)
+
+    def set_idle(self, now):
         d = self.work(now)
         self.idle = not (d["evening_day"] or d["fills"]) and CACHE["ledger"] is not None
-        self.publish(now)
 
     def publish(self, now, force=False):
         if not force and now - self.t["state"] < 20:
