@@ -43,8 +43,9 @@ p{margin:0} button{font:inherit;color:inherit} a{color:inherit}
 .beat{width:8px;height:8px;border-radius:50%;background:var(--up);display:inline-block;margin-right:7px}
 .beat.off{background:var(--dn)}
 @media (prefers-reduced-motion:no-preference){.beat{animation:beat 2.4s ease-in-out infinite}@keyframes beat{50%{opacity:.35}}}
-@media (max-width:860px){.live .opt{display:none}}
-@media (max-width:520px){.live{display:none}}
+@media (max-width:1080px){.live .opt{display:none}}
+@media (max-width:900px){.live span:first-child{display:none}}
+@media (max-width:560px){.live{display:none}}
 
 /* hero */
 .hero{padding:44px 0 8px}
