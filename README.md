@@ -23,8 +23,8 @@ Reddit, X and StockTwits (see `bot/sources/`), Yahoo Finance + Google News RSS
 > history (see [BACKTEST.md](BACKTEST.md)) found that post wording does not predict returns. The live bot
 > buys (1) stocks with a cluster of Loss posts and (2) stocks where the number of buyers is doubling
 > before the price has moved, then holds 10 trading days with a wide stop. A replay of this exact bot
-> made +88.3% vs SPY +40.5% (Aug 2024 – Nov 2026), including +50.3% vs +18.1% on a year the rules had
-> never seen. Expect drops of 25%+.
+> made +58.8% vs SPY +40.5% (Aug 2024 – Nov 2026), including +33.5% vs +18.1% on a year the rules had
+> never seen; over the most recent 15 months it only tied SPY. Expect drops of 25%+.
 > The thresholds below describe the original momentum mode; live values are in config.yaml.
 >
 > Replay the real bot over history: `uv run python -m bot.backtest.replay_live`.

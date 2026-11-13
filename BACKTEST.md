@@ -176,6 +176,35 @@ Limits: the unseen year had a strong rally in volatile stocks after April 2025, 
 names the crowd piles into. That year was scored on WSB posts only. Expect drops of 25%+ and losing
 streaks of several months. It still needs live paper results.
 
+## Round 5b: the unseen year with all subreddits (2026-11-12)
+
+Round 5 scored Aug 2024 – Jul 2025 on r/wallstreetbets posts only. I then downloaded stocks,
+StockMarket, investing, options and pennystocks for the same months (all 60 sub-months, 78k extra
+mentions) and reran everything unchanged. SPY +18.1% over the year.
+
+| Method (10-day hold, wide stop) | Unseen year, WSB only | Unseen year, all subreddits | Beat random |
+|---|---|---|---|
+| **Loss bounce 3+ and early build-up (live)** | +68.9% | **+51.7%** | 10/10 |
+| Early build-up alone | +68.3% | +56.0% | 10/10 |
+| Most bought | +32.2% | +67.6% | 10/10 |
+| Loss bounce 3+ alone | −6.7% | −6.7% | 1/10 |
+| Capitulation (retired) | −10.6% | −10.6% | 1/10 |
+
+**Replay of the real bot, Aug 15 2024 – Nov 12 2026, all subreddits:**
+| | Account | SPY |
+|---|---|---|
+| Unseen year (to Aug 13 2025) | $100k → $133.5k, **+33.5%** | +18.1% |
+| Aug 2025 – Nov 2026 | **+19.0%** | +19.0% |
+| **Whole 27 months** | **+58.8%** | +40.5% |
+Worst drop −27.8%. 450 closed trades, 51% winners, +1.2% average; 73 made 10%+, 65 lost 10%+.
+18 of 28 months positive, average month +1.9%, worst −9.4%.
+
+What this changes: the edge is real enough to keep testing but smaller than the WSB-only replay
+(+88.3%) suggested, and in the most recent 15 months it only tied SPY. All the gain comes from
+**early build-up** (378 trades, +1.4% average); **loss bounce lost money on its own in the unseen
+year and averaged −0.1% in the replay.** I did not change the live rules after seeing this, since
+retuning on the same data is what broke the capitulation rule. The live paper results decide next.
+
 ## What the live bot does now (`scoring.strategy: crowd_swing`, `bot/signals/crowd.py`)
 1. **Loss bounce (first priority):** 3+ Loss-flair posts on a stock in 5 trading days, losses ≥ 65% of
    its gain+loss posts (`scoring.loss_rule: bounce`).
