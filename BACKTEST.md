@@ -437,3 +437,30 @@ Replay of the cloud engine, Aug 15 2024 – Nov 12 2026 (SPY +40.5%):
   without the best 5% of trades the average is +1.9%, about the same as the other accounts.
 - Two years of a bull market in exactly these names (NBIS, SNDK, RKLB, MU). No bear market in the sample.
 The live paper account and a long price-history test decide whether any of it is real.
+
+## Round 12: the Momentum rule on 16 years of prices (2026-11-13)
+
+`uv run python -m bot.backtest.momentum_history`. The live Momentum rule without the Reddit part (no Reddit
+history that far back): close $5+, $5M+ traded a day, close at least double its 60-day low, daily range under
+8%. Buy the next open, sell the open 10 trading days later, 0.1% a side, one signal per stock per 10 days.
+Universe: the tickers in the project's price file with history to 2010 (today's survivors, which flatters
+it). 7,829 signals on 1,420 stocks, Apr 2010 – Oct 2026.
+
+| | Trades | Return | Median | vs SPY | vs others (t) | Winners | Without best 5% |
+|---|---|---|---|---|---|---|---|
+| All years | 7,829 | +1.0% | −0.2% | +0.3% | +0.5% (0.5) | 49% | −1.6% |
+| 2020 | 1,931 | +3.1% | +1.2% | +1.9% | +1.5% (3.0) | 54% | +0.4% |
+| 2025 | 1,217 | +3.4% | +2.4% | +2.3% | +2.5% (2.0) | 57% | +0.6% |
+| 2022 | 405 | −4.4% | −4.2% | −2.9% | −2.6% | 38% | −6.3% |
+| 2015 | 135 | −4.0% | −3.4% | −3.6% | −3.2% (−2.6) | 34% | −5.8% |
+
+- It beat SPY in 6 of 17 years (2013, 2016, 2018, 2020, 2024, 2025) and clearly only in 2020 and 2025, the two
+  speculative booms. It lost to SPY in 11 years, including every year from 2021 to 2023.
+- When SPY fell 3%+ over the 10 days, these trades averaged −7.1% (24% winners). It is a bet on a rising market.
+- The tournament found this rule in Aug 2024 – Nov 2026, which contains its best year. That is why it won.
+
+**Conclusion:** over the long run the price rule is worth about +0.3% a trade over SPY, not distinguishable
+from zero, with a median trade below zero. The one thing this cannot test is the Reddit filter (2+ people
+talking), which in 2024–2026 picked better momentum names than the price rule alone (+3.9% and +2.5% vs SPY
+against +0.7%, +2.3% and −0.1% here). The live Momentum paper account is the only test of that. Expect it to
+track the market with bigger swings, and to lose more than the market in a sell-off.
