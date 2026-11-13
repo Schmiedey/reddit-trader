@@ -241,3 +241,31 @@ Posts only (no comments), pump-watch subreddits ignored, price ≥ $5 and ≥ 1M
 stop 4 ATR (max 25%), no profit target, sell at the open after 10 trading days.
 `scripts/seed_reddit_history.py` loads recent archived posts into the live database.
 Replay any period with `uv run python -m bot.backtest.replay_live --start YYYY-MM-DD --end YYYY-MM-DD`.
+
+## Round 7: risk-adjusted check and a random Reddit-name control (2026-11-12)
+
+`uv run python -m bot.backtest.beta_check` regresses each account's daily returns (cloud replay,
+Aug 2024 – Nov 2026) on SPY, SPHB, IWM and ARKK. "@beta" = the benchmark held at the account's beta.
+| Account | Beta vs SPY | Alpha/yr vs SPY, 27 mo (t) | Alpha/yr, later 15 mo | Account vs SPY @beta, 27 mo |
+|---|---|---|---|---|
+| Early build-up | 1.19 | −2.6% (−0.2) | −16.5% | +35% vs +49% |
+| Most bought | 0.91 | +18.1% (1.2) | −4.2% | +95% vs +37% |
+| Both | 1.18 | 0.0% (0.0) | −15.0% | +41% vs +49% |
+
+`uv run python -m bot.backtest.random_control --seeds 10` replays the cloud engine with each day's
+real hits moved to the same number of random eligible names (4+ buyers in 5 days, tradable).
+| Account | Real, 27 mo | Random avg (range) | Beats random: unseen yr / later / total |
+|---|---|---|---|
+| Early build-up | +33.4% | +43.2% (+6.5% .. +118.4%) | 5/10, 2/10, 5/10 |
+| Most bought | +95.2% | +44.1% (+7.0% .. +100.4%) | 9/10, 8/10, 9/10 |
+| Both | +39.6% | +33.2% (+4.5% .. +51.8%) | 8/10, 4/10, 6/10 |
+
+- Early build-up and Both are explained by market beta and by picking Reddit names at all; the rules add nothing.
+- Most bought is the only rule that beats random Reddit names in both periods and keeps positive alpha
+  over 27 months, but t ≈ 1.2–1.5 and its alpha was negative in the later 15 months. A lead, not proof.
+- Random runs alone span +6% to +118%: single-account totals in this setup are mostly luck.
+- **Change:** the Both account is replaced by **Random Reddit names**, a live control that buys, each day, as
+  many random eligible 4+ buyer names as Most bought fires on (seeded by the date). A rule counts as working
+  only if it beats this account. Replay with the new desk: Early build-up +28.5%, Most bought +100.9%,
+  Random Reddit names +73.8% (one seed; the 10-seed average was +44%), SPY +40.5%. The existing two
+  accounts moved a few points from Round 6 after the price cache refreshed, more evidence of noise.

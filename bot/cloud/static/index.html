@@ -141,7 +141,7 @@ footer{color:var(--tx3);font-size:12px;padding:0 0 30px}
 <main>
 
 <section class="panel" aria-labelledby="h-acc">
-  <div class="ph"><div><h2 id="h-acc">Accounts</h2><div class="desc">Three $100,000 paper accounts, one rule each. Marked to the latest prices.</div></div></div>
+  <div class="ph"><div><h2 id="h-acc">Accounts</h2><div class="desc">Three $100,000 paper accounts: two Reddit rules and a random control. Marked to the latest prices.</div></div></div>
   <div class="tw"><table class="kpi" id="kpi"></table></div>
 </section>
 
@@ -216,7 +216,7 @@ footer{color:var(--tx3);font-size:12px;padding:0 0 30px}
   <div class="method">
     <div><h3>Data</h3><p id="m-data"></p></div>
     <div><h3>Classification</h3><p>Each post is read for what the author did, not tone: bought (incl. YOLO and DD posts), sold or bearish, gain or loss posts. Questions are ignored. Posts naming 6+ tickers are skipped.</p></div>
-    <div><h3>Signals</h3><p><b>Early build-up:</b> 4+ distinct buyers in 5 trading days, at least 2× the prior 5, price up &lt;10% in 5 days. <b>Most bought:</b> 5+ buyers and more buyers than sellers. A signal counts only on the day it first fires, then a 10-day cooldown.</p></div>
+    <div><h3>Signals</h3><p><b>Early build-up:</b> 4+ distinct buyers in 5 trading days, at least 2× the prior 5, price up &lt;10% in 5 days. <b>Most bought:</b> 5+ buyers and more buyers than sellers. A signal counts only on the day it first fires, then a 10-day cooldown. <b>Random Reddit names (control):</b> each day, as many randomly drawn names with 4+ buyers as Most bought fires on, so a rule only counts as working if it beats this account.</p></div>
     <div><h3>Execution</h3><p id="m-exec"></p></div>
   </div>
 </section>
@@ -225,8 +225,8 @@ footer{color:var(--tx3);font-size:12px;padding:0 0 30px}
 </div>
 
 <script>
-const ACC = ["buildup","mostbought","both"];
-const COL = {buildup:"var(--s1)", mostbought:"var(--s2)", both:"var(--s3)", spy:"var(--spy)"};
+const ACC = ["buildup","mostbought","random"];
+const COL = {buildup:"var(--s1)", mostbought:"var(--s2)", random:"var(--s3)", spy:"var(--spy)"};
 const TZ = "America/New_York";
 let S = null, BT = null, src = "bt", srcChosen = false, sigSort = {k:"buyers5", d:-1};
 const $ = id => document.getElementById(id);
@@ -342,7 +342,7 @@ function drawKPI(){
 function drawPerf(){
   const D = data(), el = $("c-ret"), dd = $("c-dd");
   document.querySelectorAll("[data-src]").forEach(b => b.setAttribute("aria-pressed", b.dataset.src === src));
-  $("legend").innerHTML = ["buildup","mostbought","both"].map(id => `<span><i class="sw" style="--c:${COL[id]}"></i>${esc(id === "buildup" ? "Early build-up" : id === "mostbought" ? "Most bought" : "Both signals")}</span>`).join("") + `<span><i class="sw dash" style="--c:${COL.spy}"></i>S&amp;P 500</span>`;
+  $("legend").innerHTML = ["buildup","mostbought","random"].map(id => `<span><i class="sw" style="--c:${COL[id]}"></i>${esc(id === "buildup" ? "Early build-up" : id === "mostbought" ? "Most bought" : "Random Reddit names")}</span>`).join("") + `<span><i class="sw dash" style="--c:${COL.spy}"></i>S&amp;P 500</span>`;
   if (!D || D.dates.length < 2) { $("perf-desc").textContent = "Live paper"; el.innerHTML = `<p class="empty">No live history yet. The first orders fill at the next market open; this chart starts after two trading days. Switch to Backtest to see the replay.</p>`; dd.innerHTML = ""; $("perf-note").textContent = ""; return; }
   $("perf-desc").textContent = D.label + ". Cumulative return including costs.";
   const xf = src === "bt" ? (d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {month:"short", year:"2-digit", timeZone:"UTC"})) : day;
@@ -435,7 +435,7 @@ function drawSig(){
       return `<tr><td class="tk">${esc(r.ticker)}</td><td class="r n">${r.price != null ? money(r.price, 2) : "–"}</td><td class="r n ${cls(r.ret5)}">${r.ret5 != null ? pct(r.ret5) : "–"}</td><td>${spark((S.spark || {})[r.ticker])}</td>
         <td><span class="bx"><span class="bxbar"><i style="width:${r.buyers5 / mx * 100}%"></i>${r.buyers_prev5 != null ? `<b style="left:calc(${r.buyers_prev5 / mx * 100}% - 1px)"></b>` : ""}</span><span class="n">${r.buyers5}</span></span></td>
         <td class="r n">${r.buyers_prev5 ?? "–"}</td><td class="r n ${cls(ch)}">${ch == null ? "–" : (ch > 0 ? "+" : ch < 0 ? "−" : "") + Math.abs(ch)}</td><td class="r n">${r.sellers5}</td>
-        <td><span class="sig${hits.includes("buildup") ? " on" : ""}">Build-up</span><span class="sig${hits.includes("mostbought") ? " on" : ""}">Most bought</span></td><td>${status}</td></tr>`; }).join("") + "</tbody>";
+        <td><span class="sig${hits.includes("buildup") ? " on" : ""}">Build-up</span><span class="sig${hits.includes("mostbought") ? " on" : ""}">Most bought</span><span class="sig${hits.includes("random") ? " on" : ""}">Random</span></td><td>${status}</td></tr>`; }).join("") + "</tbody>";
 }
 
 function drawPos(){

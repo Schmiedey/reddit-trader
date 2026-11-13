@@ -55,12 +55,12 @@ def test_engine_buys_fills_exits_and_survives_a_restart(tmp_path):
         return eng.daily(_ts(days[k], 16))
 
     assert evening(d0)["ok"]
-    for aid in ACCOUNTS:                                                              # both rules fire: every account buys
+    for aid in ACCOUNTS:                                                              # both rules fire, and the random control draws the only eligible name
         o = eng.acct(aid).execute("SELECT * FROM paper_orders").fetchall()
         assert len(o) == 1 and o[0]["sym"] == "NVDA" and o[0]["side"] == "BUY" and o[0]["status"] == "pending"
     cur["day"] = days[d0 + 1]
     assert len(eng.morning_fills(_ts(days[d0 + 1], 9))["fills"]) == 3                 # filled at the next open
-    pos = eng.acct("both").execute("SELECT * FROM paper_positions").fetchone()
+    pos = eng.acct("random").execute("SELECT * FROM paper_positions").fetchone()
     assert pos["entry_day"] == days[d0 + 1] and 9_000 < pos["qty"] * pos["entry_price"] <= 10_000   # 10% of $100k
     st = eng.state(_ts(days[d0 + 1], 12))
     assert st["mode"] == "paper" and st["accounts"][0]["positions"][0]["sym"] == "NVDA"
@@ -68,7 +68,7 @@ def test_engine_buys_fills_exits_and_survives_a_restart(tmp_path):
     led = eng.export()                                                                # restart on an empty disk
     eng = Engine(tmp_path / "b", park=False, bars_fn=fake)
     eng.load(led)
-    assert eng.acct("both").execute("SELECT COUNT(*) FROM paper_positions").fetchone()[0] == 1
+    assert eng.acct("random").execute("SELECT COUNT(*) FROM paper_positions").fetchone()[0] == 1
     assert eng.get("last_daily") == days[d0]
     for k in range(d0 + 1, d0 + 12):
         assert evening(k)["ok"]

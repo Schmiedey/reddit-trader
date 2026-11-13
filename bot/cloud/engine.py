@@ -12,6 +12,7 @@ Trades:  rules from config.yaml `trading:` (10% per trade, max 10 positions, 3 n
 """
 import json
 import os
+import random
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -38,10 +39,10 @@ ACCOUNTS = {
                 "blurb": "Buyers doubled versus the week before, and the price has not run yet."},
     "mostbought": {"name": "Most bought", "rules": ("mostbought",),
                    "blurb": "Five or more different buyers this week, and more buyers than sellers."},
-    "both": {"name": "Both signals", "rules": ("buildup", "mostbought"),
-             "blurb": "Buys when either signal fires."},
+    "random": {"name": "Random Reddit names", "rules": ("random",),
+               "blurb": "Control: as many random 4+ buyer names as Most bought picks that day."},
 }
-RULE_NAMES = {"buildup": "Early build-up", "mostbought": "Most bought"}
+RULE_NAMES = {"buildup": "Early build-up", "mostbought": "Most bought", "random": "Random pick"}
 BUILD_MIN, BUILD_RATIO, BUILD_MAX_RET5, MOST_MIN = 4, 2, 0.10, 5
 COOLDOWN = 10  # trading days. A signal is only bought on the day it first appears, then ignored this long.
 KEEP_DAYS = 40
@@ -183,6 +184,11 @@ class Engine:
             rows.append({"ticker": t, **f, "price": tb[-1]["c"] if tb else None,
                          "ret5": round(tech["ret5"], 4) if tech else None, "atr": tech["atr_pct"] if tech else None,
                          "hits": rule_hits(f, tech["ret5"]) if tech and not blocked else [], "blocked": blocked})
+        # Control account: each day, as many random eligible names as Most bought fires on (seeded by the date).
+        pool = [r for r in rows if r["ret5"] is not None and not r["blocked"]]
+        n = sum("mostbought" in r["hits"] for r in pool)
+        for r in random.Random(day).sample(pool, min(n, len(pool))):
+            r["hits"].append("random")
         rows += [{"ticker": t, **f, "price": None, "ret5": None, "atr": None, "hits": [], "blocked": None}
                  for t, f in feats.items() if 2 <= f["buyers5"] < BUILD_MIN and t != "SPY"]
         rows.sort(key=lambda r: (-len(r["hits"]), -r["buyers5"], r["ticker"]))
