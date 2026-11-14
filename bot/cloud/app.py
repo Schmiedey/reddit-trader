@@ -287,6 +287,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
         elif path in ("/copy", "/copy.html"):
             self._send(200, (STATIC / "copy.html").read_bytes(), "text/html; charset=utf-8")
+        elif path in ("/k15", "/k15.html"):
+            self._send(200, (STATIC / "k15.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/state":
             self._send(200, CACHE["state"])
         elif path == "/api/copy":

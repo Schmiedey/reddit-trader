@@ -1,0 +1,47 @@
+name: Run the 15-minute desk
+
+# Forward paper test of one fixed rule on Kalshi's 15-minute crypto markets (see bot/k15desk/desk.py).
+# No server needed: Kalshi keeps every settled market and its 1-minute quotes, so each run replays every
+# window that closed since the last one and saves k15_ledger.json to the paper-ledger branch.
+# Standard-library Python. The first run of each month also refits that month's model (a few minutes).
+
+on:
+  schedule:
+    - cron: "18,48 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: k15desk
+  cancel-in-progress: false
+
+jobs:
+  k15:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: bot/k15desk
+      - uses: actions/checkout@v4
+        with:
+          ref: paper-ledger
+          path: led
+
+      - name: Replay the windows that closed since the last run
+        run: python3 src/bot/k15desk/desk.py led/k15_ledger.json
+
+      - name: Save the ledger
+        run: |
+          cd led
+          git config user.name "k15-desk"
+          git config user.email "actions@users.noreply.github.com"
+          git add k15_ledger.json
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -q -m "k15 ledger $(date -u +%FT%RZ)"
+          # the other desks push to this branch too (different files): rebase and retry
+          for i in 1 2 3 4 5; do git push -q && { echo "k15 ledger saved"; exit 0; }; git pull -q --rebase; sleep 5; done
+          exit 1

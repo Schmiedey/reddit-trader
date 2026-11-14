@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>15-minute desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --sub:#f8f9fb; --line:#e3e6eb; --line2:#cfd4dc;
+  --tx:#14181f; --tx2:#4d5664; --tx3:#7c8594;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#8a5cd1; --spy:#7c8594;
+  --pos:#127a4a; --neg:#c23b3b; --focus:#2a78d6;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1014; --panel:#15181e; --sub:#1a1e25; --line:#252a33; --line2:#343a46;
+  --tx:#e7e9ed; --tx2:#a6aebb; --tx3:#757e8c;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#9d7ce8; --spy:#8b93a0;
+  --pos:#3ccf86; --neg:#ff7a7a; --focus:#3987e5;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:400 13.5px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
+h1,h2{margin:0;font-weight:600} h1{font-size:15px} h2{font-size:14px}
+a{color:var(--s1);text-decoration:none} a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1400px;margin:0 auto;padding:0 20px}
+.up{color:var(--pos)} .dn{color:var(--neg)} .mut{color:var(--tx2)} .faint{color:var(--tx3)}
+.n{font-variant-numeric:tabular-nums;white-space:nowrap} .r{text-align:right}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c);margin-right:7px;vertical-align:-1px}
+.sw.dash{background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 5px);height:3px;vertical-align:3px}
+header{background:var(--panel);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;gap:10px 28px;min-height:52px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
+.title{display:flex;align-items:center;gap:10px}
+.env{font-size:12px;font-weight:500;color:var(--tx2);border:1px solid var(--line2);border-radius:4px;padding:1px 7px}
+.meta{display:flex;flex-wrap:wrap;gap:4px 22px;color:var(--tx3);font-size:12.5px;margin-left:auto}
+.meta b{color:var(--tx);font-weight:500}
+main{padding:16px 0 40px;display:grid;gap:14px}
+.grid{display:grid;gap:14px} .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))} .g32{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}
+@media (max-width:1100px){.g32{grid-template-columns:1fr}}
+.live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos);margin-right:6px;vertical-align:1px}
+.live.busy{background:var(--s2)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.ph .desc{color:var(--tx3);font-size:12.5px;margin-top:1px}
+.pb{padding:14px 16px} .pb.flush{padding:0}
+.kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px}
+.kpi .l{color:var(--tx3);font-size:12px} .kpi .v{font-size:15px;font-weight:500}
+.big{font-size:22px;font-weight:600}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.8px}
+th{font-weight:500;color:var(--tx3);text-align:left;padding:7px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sub)}
+td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.tag{font-size:11.5px;border:1px solid var(--line2);border-radius:4px;padding:0 6px;color:var(--tx2);white-space:nowrap}
+.tag.left{color:var(--neg);border-color:currentColor}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--tx2);font-size:12.5px}
+svg text{fill:var(--tx3);font-size:11px}
+.note li{margin:3px 0;color:var(--tx2)}
+.err{display:none;border:1px solid var(--line2);border-left:3px solid var(--neg);background:var(--panel);padding:10px 12px;border-radius:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.kpis .panel{padding:12px 16px} .kpis .l{color:var(--tx3);font-size:12px} .kpis .v{font-size:20px;font-weight:600;margin-top:2px} .kpis .s{color:var(--tx3);font-size:12px}
+td.r,th.r{text-align:right}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="title"><h1>15-minute desk</h1><span class="env">Paper trading</span><a href="/" class="faint" style="font-size:12.5px">Reddit desk</a><a href="/copy" class="faint" style="font-size:12.5px">Copy desk</a></div>
+  <div class="meta" id="meta"></div>
+</div></header>
+<div class="wrap"><main>
+  <div class="err" id="err"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid g32">
+    <section class="panel"><div class="ph"><div><h2>Cumulative result</h2><div class="desc">Net of fees, one contract per bet, in cents. Grey line: what the backtest's +2.5c a bet would give.</div></div></div>
+      <div class="pb"><svg id="chart" width="100%" height="240" role="img" aria-label="Cumulative result"></svg></div></section>
+    <section class="panel"><div class="ph"><div><h2>By coin</h2><div class="desc">Settled bets</div></div></div>
+      <div class="pb flush tw"><table><thead><tr><th>Market</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Net per bet</th></tr></thead><tbody id="coins"></tbody></table></div></section>
+  </div>
+  <section class="panel"><div class="ph"><div><h2>Bets</h2><div class="desc">Newest first. Times UTC. Price = Kalshi ask at the end of the window's first minute.</div></div></div>
+    <div class="pb flush tw"><table><thead><tr><th>Window</th><th>Market</th><th>Bought</th><th class="r">Price</th><th class="r">Model</th><th>Result</th><th class="r">Net</th></tr></thead><tbody id="bets"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><div><h2>The rule</h2><div class="desc">Fixed on 2026-11-13, never edited</div></div></div>
+    <div class="pb"><ul class="note" style="margin:0;padding-left:18px">
+      <li>Kalshi's 15-minute BTC, ETH, SOL and XRP markets. A window often finishes opposite to the one before it.</li>
+      <li>A model of how likely a reversal is, from the last two moves, run length, the 4-hour trend and minute of the hour, refit each month on the previous 180 days of Coinbase candles.</li>
+      <li>In the model's top 10% of windows: buy the reversal side at the ask at the end of minute 1, if the spread is 3c or less and the price is 20-80c. Hold to the result. Taker fee 7% x p x (1-p).</li>
+      <li>Backtest, monthly walk-forward Dec 2025 - Nov 2026: 7,999 bets, 55.4% wins at 51c, +2.5c a bet (+4.8%), t = 3.5. Forward results here are the real test.</li>
+      <li>Replayed from Kalshi's public record a few times a day by a GitHub Actions job (<code>bot/k15desk/desk.py</code>). No orders are placed.</li>
+    </ul></div></section>
+</main></div>
+<script>
+const URL_ = "https://raw.githubusercontent.com/Schmiedey/reddit-trader/paper-ledger/k15_ledger.json";
+const $ = id => document.getElementById(id);
+const c = v => (v >= 0 ? "+" : "") + (100 * v).toFixed(1) + "c";
+const pct = v => (v >= 0 ? "+" : "") + (100 * v).toFixed(1) + "%";
+const cls = v => v > 0 ? "up" : v < 0 ? "dn" : "";
+const t = s => new Date(s * 1000).toISOString().slice(5, 16).replace("T", " ");
+const name = s => s.replace("KX", "").replace("15M", "");
+function render(led) {
+  const bets = led.bets.filter(b => b.net !== null && b.net !== undefined);
+  const s = led.summary || {};
+  $("meta").innerHTML = `Forward test since <b>${t(led.start)}</b> UTC &middot; updated <b>${(led.updated_utc || "").replace("T", " ")}</b>`;
+  const wr = s.bets ? s.wins / s.bets : 0;
+  const k = [
+    ["Settled bets", s.bets || 0, `${s.windows || 0} windows (coins move together)`],
+    ["Win rate", s.bets ? (100 * wr).toFixed(1) + "%" : "-", s.bets ? `vs average price ${(100 * s.avg_price).toFixed(1)}c` : ""],
+    ["Net per bet", s.bets ? `<span class="${cls(s.net_per_share)}">${c(s.net_per_share)}</span>` : "-", "after fees, per contract"],
+    ["Return per bet", s.bets ? `<span class="${cls(s.return_per_bet)}">${pct(s.return_per_bet)}</span>` : "-", "backtest: +4.8%"],
+    ["t-statistic", s.t ?? "-", "clustered by window; needs |t| > 2"],
+  ];
+  $("kpis").innerHTML = k.map(([l, v, x]) => `<div class="panel"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${x}</div></div>`).join("");
+  $("coins").innerHTML = Object.entries(s.by_coin || {}).map(([k2, v]) =>
+    `<tr><td>${name(k2)}</td><td class="r">${v.bets}</td><td class="r">${(100 * v.wins / v.bets).toFixed(1)}%</td><td class="r ${cls(v.net_per_share)}">${c(v.net_per_share)}</td></tr>`).join("") || `<tr><td colspan="4" class="faint">No settled bets yet</td></tr>`;
+  $("bets").innerHTML = led.bets.slice().reverse().slice(0, 300).map(b => b.skip
+    ? `<tr class="faint"><td>${t(b.t0)}</td><td>${name(b.series)}</td><td>${b.side.toUpperCase()}</td><td class="r">${b.ask ?? "-"}</td><td class="r">${b.p_rev.toFixed(3)}</td><td colspan="2">skipped: ${b.skip}</td></tr>`
+    : `<tr><td>${t(b.t0)}</td><td>${name(b.series)}</td><td>${b.side.toUpperCase()}</td><td class="r">${b.price.toFixed(2)}</td><td class="r">${b.p_rev.toFixed(3)}</td><td>${b.won ? "won" : "lost"}</td><td class="r ${cls(b.net)}">${c(b.net)}</td></tr>`).join("");
+  chart(bets);
+  window.onresize = () => chart(bets);
+}
+function chart(bets) {
+  const svg = $("chart"), W = Math.max(320, Math.round(svg.parentElement.getBoundingClientRect().width) - 32), H = 240, L = 44, R = 10, T = 10, B = 22;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (!bets.length) { svg.innerHTML = `<text x="${L}" y="${H / 2}">No settled bets yet</text>`; return; }
+  let cum = 0; const pts = bets.map(b => (cum += b.net));
+  const exp = bets.map((_, i) => (i + 1) * 0.025);
+  const lo = Math.min(0, ...pts, ...exp), hi = Math.max(0, ...pts, ...exp), n = pts.length;
+  const x = i => L + (W - L - R) * (n > 1 ? i / (n - 1) : 0.5), y = v => T + (H - T - B) * (hi === lo ? 0.5 : (hi - v) / (hi - lo));
+  const path = a => a.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const ticks = [lo, (lo + hi) / 2, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${(100 * v).toFixed(0)}c</text>`).join("");
+  svg.innerHTML = ticks + `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line2)"/>`
+    + `<path d="${path(exp)}" fill="none" stroke="var(--spy)" stroke-dasharray="4 3" stroke-width="1.5"/>`
+    + `<path d="${path(pts)}" fill="none" stroke="var(--s1)" stroke-width="2"/>`
+    + `<text x="${L}" y="${H - 4}">${t(bets[0].t0)}</text><text x="${W - R}" y="${H - 4}" text-anchor="end">${t(bets[n - 1].t0)}</text>`;
+}
+fetch(URL_ + "?t=" + Date.now(), {cache: "no-store"}).then(r => { if (!r.ok) throw new Error(r.status === 404 ? "No ledger yet: the first run has not finished." : "Could not load the ledger (" + r.status + ")"); return r.json(); })
+  .then(render).catch(e => { $("err").style.display = "block"; $("err").textContent = e.message; });
+</script>
+</body>
+</html>
