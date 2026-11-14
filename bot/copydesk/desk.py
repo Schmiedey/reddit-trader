@@ -8,6 +8,10 @@ Rules, fixed in advance:
 - Three $100k accounts copy the wallets in leaders.json, one per copy delay (1, 15, 60 min). A fourth
   account (added 2026-11-13) copies the daily traders in daily.json 1 minute late. Each account splits
   its money equally between its wallets that had >= $10k when the account opened ("slices").
+- A fifth account (added 2026-11-14) trades a signal instead of copying: the t-stat-weighted net
+  direction of 7 wallets with timing skill (consensus.json, frozen from research/copytrade/council.py).
+  Each hour, for BTC/ETH/SOL/HYPE: long 25% if the signal >= +0.05, short 25% if <= -0.05, else flat,
+  executed at the next hour's open.
 - A slice holds the leader's positions scaled to the slice's money (the same leverage as the
   leader), capped at 5x in total. It trades only when the leader trades.
 - Fills: the open price of the first 1-minute candle at/after (leader fill + delay), plus 0.045%
@@ -33,6 +37,7 @@ ACCOUNTS = {  # existing accounts are never edited (that would spoil the compari
     "slow": {"name": "15-minute copier", "delay": 900_000, "group": "leaders.json"},
     "hourly": {"name": "1-hour copier", "delay": 3_600_000, "group": "leaders.json"},
     "daily": {"name": "Daily traders", "delay": 60_000, "group": "daily.json"},
+    "consensus": {"name": "Consensus signal", "delay": 3_600_000, "group": "consensus.json", "kind": "signal"},
 }
 FEE, SLIP = 0.00045, 0.0005
 MAX_LEV = 5.0
@@ -222,7 +227,31 @@ def account_equity(acct):
 # ---------------------------------------------------------------- the run
 
 def load_group(name):
-    return json.load(open(os.path.join(HERE, name)))
+    g = json.load(open(os.path.join(HERE, name)))
+    if "weights" in g:  # a signal account: {addr: weight}
+        return {a: f"{a[2:6]} · consensus wallet (weight {w:.2f})" for a, w in g["weights"].items()}
+    return g
+
+
+def consensus_cfg():
+    return json.load(open(os.path.join(HERE, "consensus.json")))
+
+
+def consensus_dirs(state, cfg):
+    """state: {addr: {coin: signed size}}. Returns ({coin: -1/0/1}, {coin: signal})."""
+    w = cfg["weights"]
+    tot = sum(w.values())
+    sig = {c: sum(wt * ((state.get(a, {}).get(c, 0.0) > 0) - (state.get(a, {}).get(c, 0.0) < 0)) for a, wt in w.items()) / tot
+           for c in cfg["coins"]}
+    return {c: (1 if v >= cfg["threshold"] else -1 if v <= -cfg["threshold"] else 0) for c, v in sig.items()}, sig
+
+
+def set_direction(sl, coin, d, px, weight):
+    """Hold `weight` of the slice's equity long (d=1) or short (d=-1) in coin, or nothing (0)."""
+    cur = sl["pos"].get(coin, [0.0, px])[0]
+    if (cur > 0) - (cur < 0) == d:
+        return None
+    return rebalance(sl, coin, d * weight * sl["eq"] / px if px else 0.0, px)
 
 
 def snapshot_leader(addr):
@@ -231,7 +260,7 @@ def snapshot_leader(addr):
     return pos, {p["position"]["coin"]: float(p["position"]["positionValue"]) for p in st["assetPositions"] if main_dex(p["position"]["coin"])}
 
 
-def ensure_leader(led, addr, label, t, now):
+def ensure_leader(led, addr, label, t, now, group=None):
     """Add a leader the first time any account copies it. Returns (current positions, equity at t)."""
     ts, eq, _, _ = account_history(addr, t - H, now)
     e = interp(ts, eq, t)
@@ -244,15 +273,29 @@ def ensure_leader(led, addr, label, t, now):
                                 "base_eq": e, "eq": e, "flow": 0.0,
                                 "last_fill": max((x["time"] for x in recent), default=None), "pos": {}}
     led["leaders"][addr]["pos"] = {c: round(v) for c, v in vals.items()}
+    if group and group not in led["leaders"][addr].setdefault("groups", []):
+        led["leaders"][addr]["groups"].append(group)
     return pos, e
 
 
 def open_account(led, aid, t, now, mids):
     """Open a $100k account at time t holding its leaders' current positions (scaled), at current prices."""
     cfg = ACCOUNTS[aid]
+    if cfg.get("kind") == "signal":
+        state = {}
+        for addr, label in load_group(cfg["group"]).items():
+            pos, _ = ensure_leader(led, addr, label, t, now, cfg["group"])
+            state[addr] = {c: v for c, v in pos.items() if c in consensus_cfg()["coins"]} if led["leaders"][addr]["status"] == "active" else {}
+        acct = {"name": cfg["name"], "delay": cfg["delay"], "group": cfg["group"], "kind": "signal", "opened": t, "cash": 0.0,
+                "slices": {"signal": new_slice(START_CASH)}, "lstate": state, "pending": [], "signal": consensus_dirs(state, consensus_cfg())[1],
+                "curve": [[t, START_CASH, mids.get("BTC")]], "trades": []}
+        led["accounts"][aid] = acct
+        led["log"].append({"ts": t, "msg": f"Opened {cfg['name']}: trading BTC/ETH/SOL/HYPE on the net direction of "
+                                             f"{len(state)} wallets ({sum(1 for a in state if led['leaders'][a]['status'] == 'active')} still active)"})
+        return
     live = []
     for addr, label in load_group(cfg["group"]).items():
-        pos, e = ensure_leader(led, addr, label, t, now)
+        pos, e = ensure_leader(led, addr, label, t, now, cfg["group"])
         if led["leaders"][addr]["status"] == "active" and e >= MIN_LEADER_EQ:
             live.append((addr, pos, e))
     acct = {"name": cfg["name"], "delay": cfg["delay"], "group": cfg["group"], "opened": t,
@@ -279,6 +322,34 @@ def start_ledger(now):
     return led
 
 
+def signal_events(led, acct, raw, t0, t1):
+    """Replay the signal wallets' positions hour by hour through (t0, t1]. Each hour's decision executes
+    one hour later (orders still due after t1 wait in acct['pending']). Updates acct['lstate']/['signal']."""
+    cfg = consensus_cfg()
+    state = {a: dict(v) for a, v in acct["lstate"].items()}
+    fl = sorted(((x["time"], a, x) for a in cfg["weights"] for x in raw.get(a, []) if x["time"] > t0 and x["coin"] in cfg["coins"]),
+                key=lambda z: z[0])
+    out = [(e, d) for e, d in acct.get("pending", [])]
+    i = 0
+    for h in range((t0 // H + 1) * H, t1 + 1, H):
+        while i < len(fl) and fl[i][0] <= h:
+            _, a, x = fl[i]
+            state.setdefault(a, {})[x["coin"]] = float(x["startPosition"]) + (1 if x["side"] == "B" else -1) * float(x["sz"])
+            i += 1
+        for a, L in led["leaders"].items():  # a wallet that left counts as holding nothing
+            if a in state and L["status"] != "active":
+                state[a] = {}
+        dirs, sig = consensus_dirs(state, cfg)
+        out.append((h + cfg["lag_ms"], dirs))
+        acct["signal"] = {c: round(v, 3) for c, v in sig.items()}
+    while i < len(fl):
+        _, a, x = fl[i]
+        state.setdefault(a, {})[x["coin"]] = float(x["startPosition"]) + (1 if x["side"] == "B" else -1) * float(x["sz"])
+        i += 1
+    acct["lstate"] = state
+    return out
+
+
 def run(led, now, min_step=MIN_STEP):
     t0, t1 = led["synced_to"], now - SETTLE
     if t1 - t0 < min_step:
@@ -287,11 +358,12 @@ def run(led, now, min_step=MIN_STEP):
     mids = {k: float(v) for k, v in post({"type": "allMids"}).items()}
     fetch_from = t0 - MAX_DELAY
     events, coins, n_fills = [], {"BTC"}, 0
-    hist = {}
+    hist, raw = {}, {}
     for addr, L in led["leaders"].items():
         if L["status"] != "active":
             continue
         fills = leader_fills(addr, fetch_from, t1)
+        raw[addr] = fills
         n_fills += len([f for f in fills if f["time"] > t0])
         if fills:
             L["last_fill"] = max(L["last_fill"] or 0, fills[-1]["time"])
@@ -300,9 +372,13 @@ def run(led, now, min_step=MIN_STEP):
         for t, coin, lpos in leader_targets(fills):
             coins.add(coin)
             events.append((t, "fill", addr, coin, lpos, interp(ts, eq, t)))
-    for acct in led["accounts"].values():
+    sig_events = {}
+    for aid, acct in led["accounts"].items():
         for sl in acct["slices"].values():
             coins.update(sl["pos"])
+        if acct.get("kind") == "signal":
+            sig_events[aid] = signal_events(led, acct, raw, t0, t1)
+            coins.update(consensus_cfg()["coins"])
     prices = Prices(fetch_from, t1, mids)
     fund = funding(sorted(coins), t0, t1)
     hours = list(range((t0 // H + 1) * H, t1 + 1, H))
@@ -311,7 +387,19 @@ def run(led, now, min_step=MIN_STEP):
         evs = [(t + d, 0, a, c, p, e) for t, _, a, c, p, e in events if t0 < t + d <= t1]
         evs += [(ft, 1, None, c, r, None) for c, rows in fund.items() for ft, r in rows]
         evs += [(h, 2, None, None, None, None) for h in hours]
+        evs += [(e, 0.5, "signal", None, dirs, None) for e, dirs in sig_events.get(aid, []) if t0 < e <= t1]
         for t, kind, addr, coin, val, leq in sorted(evs, key=lambda e: (e[0], e[1])):
+            if kind == 0.5:
+                sl = acct["slices"]["signal"]
+                if sl["blown"]:
+                    continue
+                mark(sl, lambda c: prices.at(c, t))
+                for coin, dval in val.items():
+                    px = prices.at(coin, t)
+                    r = set_direction(sl, coin, dval, px, consensus_cfg()["weight_per_coin"])
+                    if r:
+                        acct["trades"].append([t, "signal", coin, round(r[0], 8), px, round(r[1], 4)])
+                continue
             if kind == 0:
                 sl = acct["slices"].get(addr)
                 if sl is None or sl["blown"]:
@@ -333,6 +421,8 @@ def run(led, now, min_step=MIN_STEP):
         for sl in acct["slices"].values():
             mark(sl, lambda c: mids.get(c) or prices.at(c, t1))
         acct["curve"].append([t1, round(account_equity(acct), 2), mids.get("BTC") or prices.at("BTC", t1)])
+        if aid in sig_events:
+            acct["pending"] = [[e, d] for e, d in sig_events[aid] if e > t1]
         acct["trades"] = acct["trades"][-1500:]
         acct["curve"] = compact(acct["curve"], t1)
     # leader money flows: equity change that trading PnL doesn't explain = deposits/withdrawals

@@ -138,3 +138,28 @@ Shortlist (copy return 1st half / 2nd half, worst drawdown):
 - High return, high risk: `0xfc76f730c3e2939825484e0a777368075d779ef9` (+132% / +798%, 47%)
 
 Chosen from 750 wallets on the same 7 months, so some of these are luck; only a forward test settles it.
+
+## Council experiments (`council.py`, 2026-11-14)
+Chosen on Apr 21 - Aug 15, judged once on Aug 16 - Nov 12. Hourly, next-hour execution, 0.095% per
+side plus funding, BTC/ETH/SOL/HYPE at 25% each. Pass rule fixed in advance: profitable, beats
+buy-and-hold and the plain baseline, beats 95% of fake versions, both test halves > 0, positive alpha.
+
+**Lookahead caught:** the first run included the 845 leaderboard wallets, which had been picked partly
+on last-month profit (inside the test window). Every result below uses only the 409 wallets chosen on
+data up to Jul 31.
+
+| test | test-window return | verdict |
+|---|---|---|
+| 1. Consensus of 7 wallets with timing skill | **+27.9%** (buy-and-hold +12.2%, trend rule +10.3%, fakes median +0.1%, beats 98%) | **passes** |
+| 2. Fade crowded losing positions of 59 high-win-rate wallets | −11.7% | fails |
+| 3. Copy 16 formation-picked daily traders with a loss filter | −20.9% (plain copy −14.1%, random wallets +9.9%) | fails |
+
+Test 1 stress checks: no single wallet drives it (leaving one out gives +18% to +27%); all four coins
+are profitable; 3 of 4 test quarters are profitable (+15.6% while the coins fell 18.5%); equal weights
+give +27%. Weak points: it only works with a loose threshold (0.05-0.1; 0.2+ gives +8% and below);
+the edge fades within hours (+12% at a 4-hour delay, +4% at 24 hours); it was short ETH/SOL 84-92% of
+the time; and only 7 wallets passed the skill cut, about what luck gives (6). One of three tests passing
+at the 98th percentile is suggestive, not proof.
+
+Test 3 repeats the live lesson: daily traders with high win rates, chosen without lookahead, lost 14%
+to copy while random wallets made 10%.

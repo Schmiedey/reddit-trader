@@ -60,3 +60,22 @@ def test_interp_and_compact():
     kept = desk.compact(curve, now)
     old = [p for p in kept if p[0] < now - 30 * 86400_000]
     assert len(old) == pytest.approx(10 * 4, abs=2) and kept[-1][0] == now
+
+
+def test_consensus_direction_uses_weighted_net_sign_and_threshold():
+    cfg = {"weights": {"a": 2.0, "b": 1.0, "c": 1.0}, "threshold": 0.3, "coins": ["BTC", "ETH", "SOL"]}
+    state = {"a": {"BTC": 5.0, "ETH": -1.0}, "b": {"BTC": -2.0, "ETH": -3.0}, "c": {}}
+    dirs, sig = desk.consensus_dirs(state, cfg)
+    assert sig == {"BTC": pytest.approx(0.25), "ETH": pytest.approx(-0.75), "SOL": 0.0}
+    assert dirs == {"BTC": 0, "ETH": -1, "SOL": 0}           # 0.25 is below the 0.3 threshold
+
+
+def test_set_direction_only_trades_on_a_change():
+    sl = desk.new_slice(100_000.0)
+    d, _ = desk.set_direction(sl, "BTC", 1, 50_000.0, 0.25)
+    assert d == pytest.approx(0.5)                            # 25% of $100k
+    assert desk.set_direction(sl, "BTC", 1, 51_000.0, 0.25) is None
+    d, _ = desk.set_direction(sl, "BTC", -1, 50_000.0, 0.25)  # flip: sell 0.5 and short ~0.5
+    assert d < -0.99 and sl["pos"]["BTC"][0] < 0
+    desk.set_direction(sl, "BTC", 0, 50_000.0, 0.25)
+    assert "BTC" not in sl["pos"]

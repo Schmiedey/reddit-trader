@@ -11,13 +11,13 @@
 :root{
   --bg:#f4f5f7; --panel:#ffffff; --sub:#f8f9fb; --line:#e3e6eb; --line2:#cfd4dc;
   --tx:#14181f; --tx2:#4d5664; --tx3:#7c8594;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#8a5cd1; --spy:#7c8594;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#8a5cd1; --s5:#c9a227; --spy:#7c8594;
   --pos:#127a4a; --neg:#c23b3b; --focus:#2a78d6;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0e1014; --panel:#15181e; --sub:#1a1e25; --line:#252a33; --line2:#343a46;
   --tx:#e7e9ed; --tx2:#a6aebb; --tx3:#757e8c;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#9d7ce8; --spy:#8b93a0;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#9d7ce8; --s5:#d6b545; --spy:#8b93a0;
   --pos:#3ccf86; --neg:#ff7a7a; --focus:#3987e5;
 }}
 *{box-sizing:border-box}
@@ -75,6 +75,9 @@ svg text{fill:var(--tx3);font-size:11px}
     <section class="panel"><div class="ph"><div><h2>Desk log</h2><div class="desc">Starts, stops and wallets that left</div></div></div>
       <div class="pb flush tw"><table><tbody id="log"></tbody></table></div></section>
   </div>
+  <section class="panel"><div class="ph"><div><h2>Consensus signal</h2><div class="desc">Weighted net direction of 7 wallets that showed timing skill (frozen Nov 14). Long 25% at +0.05 or above, short 25% at −0.05 or below, else flat. Re-read every hour, traded one hour later.</div></div></div>
+    <div class="pb flush tw"><table><thead><tr><th>Coin</th><th class="r">Signal now</th><th>Account holds</th><th class="r">Position</th><th>Wallets long</th><th>Wallets short</th></tr></thead><tbody id="cons-coins"></tbody></table></div>
+    <div class="pb flush tw" style="border-top:1px solid var(--line)"><table><thead><tr><th>Wallet</th><th>Status</th><th class="r">Weight</th><th class="r">Equity</th><th>Positions in the 4 coins</th><th>Last trade</th></tr></thead><tbody id="cons-wallets"></tbody></table></div></section>
   <section class="panel"><div class="ph"><div><h2>Daily traders</h2><div class="desc">7 wallets that close trades every day or two with high win rates (added Nov 13). Copied 1 minute late.</div></div></div>
     <div class="pb flush tw"><table><thead id="lh-daily"></thead><tbody id="leaders-daily"></tbody></table></div></section>
   <section class="panel"><div class="ph"><div><h2>Original 8 wallets</h2><div class="desc">Wallets that were profitable to copy in all four quarters. Copied 1, 15 and 60 minutes late.</div></div></div>
@@ -94,8 +97,8 @@ svg text{fill:var(--tx3);font-size:11px}
 const LOCAL = new URLSearchParams(location.search).get("ledger");
 const RAW = "https://raw.githubusercontent.com/Schmiedey/reddit-trader/paper-ledger/copy_ledger.json";
 let timer = null;
-const COL = {fast: "var(--s1)", slow: "var(--s2)", hourly: "var(--s3)", daily: "var(--s4)"};
-const SHORT = {fast: "1-min", slow: "15-min", hourly: "1-hour", daily: "Daily"};
+const COL = {fast: "var(--s1)", slow: "var(--s2)", hourly: "var(--s3)", daily: "var(--s4)", consensus: "var(--s5)"};
+const SHORT = {fast: "1-min", slow: "15-min", hourly: "1-hour", daily: "Daily", consensus: "Consensus"};
 let serverTime = null, busy = false;
 const $ = id => document.getElementById(id);
 const usd = (v, d = 0) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: d, minimumFractionDigits: d});
@@ -116,8 +119,8 @@ function render(led) {
     const btc = c0[2] ? last[2] / c0[2] - 1 : 0;
     const s = Object.values(a.slices), fees = s.reduce((x, y) => x + y.fees, 0), fund = s.reduce((x, y) => x + y.funding, 0);
     const open = s.reduce((x, y) => x + Object.keys(y.pos).length, 0);
-    const what = id === "daily" ? `${s.length} daily traders` : `${s.length} original wallets`;
-    return `<section class="panel"><div class="ph"><div><h2><span class="sw" style="--c:${COL[id] || "var(--tx3)"}"></span>${esc(a.name)}</h2><div class="desc">${what} · enters ${a.delay / 60000} min late · since ${when(c0[0])}</div></div></div>
+    const what = a.kind === "signal" ? "signal from 7 wallets · BTC/ETH/SOL/HYPE" : id === "daily" ? `${s.length} daily traders` : `${s.length} original wallets`;
+    return `<section class="panel"><div class="ph"><div><h2><span class="sw" style="--c:${COL[id] || "var(--tx3)"}"></span>${esc(a.name)}</h2><div class="desc">${what} · ${a.kind === "signal" ? "trades 1 hour after each reading" : `enters ${a.delay / 60000} min late`} · since ${when(c0[0])}</div></div></div>
       <div class="pb"><div class="big n">${usd(eq)}</div><div style="margin:2px 0 12px">${pct(eq / 100000 - 1)} <span class="faint">since start · BTC ${pct(btc)}</span></div>
       <div class="kpi"><div><div class="l">Fees + slippage</div><div class="v n">${usd(-fees)}</div></div><div><div class="l">Funding</div><div class="v n">${usd(fund)}</div></div>
       <div><div class="l">Paper trades</div><div class="v n">${s.reduce((x, y) => x + y.trades, 0).toLocaleString()}</div></div><div><div class="l">Open positions</div><div class="v n">${open}</div></div></div></div></section>`;
@@ -142,7 +145,7 @@ function render(led) {
   const table = (ids, head, body) => {
     const main = ids[0];
     $(head).innerHTML = `<tr><th>Wallet</th><th>Status</th><th class="r">Leader equity</th>${ids.map(id => `<th class="r">${ids.length > 1 ? SHORT[id] + " slice" : "Slice return"}</th>`).join("")}<th class="r">Paper trades</th><th class="r">Fees + funding</th><th>Leader holds now</th><th>Last leader trade</th></tr>`;
-    const addrs = Object.keys(L).filter(ad => ids.some(id => A[id].slices[ad]) || (main === "fast" && !Object.values(A).some(a => a.slices[ad])));
+    const addrs = Object.keys(L).filter(ad => ids.some(id => A[id].slices[ad]) || (main === "fast" && !Object.values(A).some(a => a.slices[ad]) && !(L[ad].groups || []).some(g => g !== "leaders.json")));
     $(body).innerHTML = addrs.map(ad => {
       const l = L[ad], f = A[main].slices[ad];
       const cell = id => A[id].slices[ad] ? pct(A[id].slices[ad].eq / startOf(id) - 1) : '<span class="faint">—</span>';
@@ -156,6 +159,24 @@ function render(led) {
   };
   table(groups["daily.json"] || [], "lh-daily", "leaders-daily");
   table(groups["leaders.json"] || ["fast"], "lh-core", "leaders-core");
+  // consensus
+  const ca = A.consensus;
+  if (ca) {
+    const sl = ca.slices.signal, ls = ca.lstate || {};
+    const dirOf = v => v > 0 ? '<span class="up">long</span>' : v < 0 ? '<span class="dn">short</span>' : '<span class="faint">flat</span>';
+    $("cons-coins").innerHTML = ["BTC", "ETH", "SOL", "HYPE"].map(c => {
+      const p = sl.pos[c], v = (ca.signal || {})[c] || 0;
+      const who = s => Object.entries(ls).filter(([a, q]) => Math.sign(q[c] || 0) === s).map(([a]) => esc(a.slice(2, 6))).join(", ") || '<span class="faint">none</span>';
+      return `<tr><td>${c}</td><td class="r n">${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}</td><td>${dirOf(p ? p[0] : 0)}</td><td class="r n">${p ? usd(Math.abs(p[0] * p[1])) : "—"}</td><td class="mut">${who(1)}</td><td class="mut">${who(-1)}</td></tr>`;
+    }).join("");
+    $("cons-wallets").innerHTML = Object.entries(ls).map(([ad, q]) => {
+      const l = L[ad] || {}, wt = (l.label || "").match(/weight ([0-9.]+)/);
+      const pos = Object.entries(q).filter(([c, v]) => v).map(([c, v]) => `${esc(c)} ${v > 0 ? "long" : "short"}`).join(", ");
+      return `<tr><td><a href="https://hypurrscan.io/address/${ad}" target="_blank" rel="noopener">${esc(ad.slice(0, 6))}…${esc(ad.slice(-4))}</a></td>
+        <td><span class="tag ${l.status === "left" ? "left" : ""}" title="${esc(l.note || "")}">${l.status === "left" ? "left" : "active"}</span></td>
+        <td class="r n">${wt ? wt[1] : "—"}</td><td class="r n">${usd(l.eq || 0)}</td><td class="mut">${pos || '<span class="faint">nothing</span>'}</td><td class="n mut">${ago(l.last_fill)}</td></tr>`;
+    }).join("");
+  } else { $("cons-coins").innerHTML = '<tr><td colspan="6" class="faint">Opens at the next sync</td></tr>'; $("cons-wallets").innerHTML = ""; }
   // trades, all accounts
   const lab = ad => (L[ad] ? L[ad].label.split(" ·")[0] : ad.slice(0, 6));
   const tr = Object.entries(A).flatMap(([id, a]) => a.trades.slice(-80).map(t => [id, ...t])).sort((p, q) => q[1] - p[1]).slice(0, 80);

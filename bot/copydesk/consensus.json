@@ -1,0 +1,21 @@
+{
+ "note": "Frozen 2026-11-14 from research/copytrade/council.py (experiment 1). Do not edit: start a new account instead.",
+ "weights": {
+  "0x0b00c540bc5f203d97ac87da62164d3d37e19798": 2.63,
+  "0x452ea0373056462c8e3b301c996ecfab3511d712": 2.055,
+  "0x625a341283aa40c3e2ddc13921ab1850013f23a6": 2.277,
+  "0x87a6be3552386cc5266a5596c88022d7d8f4aa97": 2.475,
+  "0x9803e982c4eb6d9b9e416966814e7f9fa4363bce": 2.105,
+  "0xb76bc3d01ac05fd8cb1078334923785f76fe0b3c": 2.621,
+  "0xda744273f80b22412417f7cfe0503f3d721f987d": 2.899
+ },
+ "threshold": 0.05,
+ "coins": [
+  "BTC",
+  "ETH",
+  "SOL",
+  "HYPE"
+ ],
+ "weight_per_coin": 0.25,
+ "lag_ms": 3600000
+}
