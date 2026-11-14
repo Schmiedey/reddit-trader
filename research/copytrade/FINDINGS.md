@@ -117,3 +117,24 @@ record among 214 wallets is what chance produces. Only the forward test can sepa
   withdrew $100k, and has held nothing since Nov 6.
 - 4 of the 5 still-active wallets lost money in the last 30 days (−$57k to −$120k).
 - 0x13d03265's PnL mostly comes from markets the copier doesn't follow (its main-exchange positions are tiny).
+
+## Daily traders with high win rates (`find_daily.py`, 2026-11-13)
+903 more wallets downloaded (58 from our sample + 845 active, profitable leaderboard wallets); 750 had
+complete histories. Rules: >= 0.5 closed trades/day, median hold <= 3 days, win rate >= 65%, profit
+factor >= 1.5, >= $50k profit after counting losses still open, and both halves of Apr 21 - Nov 12
+profitable with >= 60% wins. 143 trade daily, 25 also have high win rate and profit, 17 pass everything.
+
+**A high win rate didn't mean copying made money.** Replaying the copier hourly on the 17:
+`0x9c062c05` (86% wins, +$2.3M closed) lost 17% to copy with an 86% drawdown, because it sits on
+−$532k of open losers. Six of the 17 lost money to copy.
+
+Shortlist (copy return 1st half / 2nd half, worst drawdown):
+- Clean: `0x15baf1cefcced43e971da85b7b4de5a0391f7b29` (+8% / +24%, 5%),
+  `0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1` (+5% / +5%, 17%)
+- Near misses: `0xac142fee46f8dacbfef23e1e41d79f1f7233487e` (−3% / +17%, 19%),
+  `0x3d9a4b794841e32d37f26f37fa4d74902dd9debf` (−4% / +41%, 20%),
+  `0xc0b2a1ce425d0cd8bc321c445fa6ae0eaed2e688` (−6% / +14%, 17%),
+  `0xc7d3f8b3ea83e808b0d91a554c130870e1302d7c` (+24% / +76%, 33%)
+- High return, high risk: `0xfc76f730c3e2939825484e0a777368075d779ef9` (+132% / +798%, 47%)
+
+Chosen from 750 wallets on the same 7 months, so some of these are luck; only a forward test settles it.

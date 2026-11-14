@@ -5,8 +5,9 @@ Every leader trade is public and timestamped, so this does not need to run all t
 run, as if a bot had copied each of their fills 1, 15 or 60 minutes later. Standard library only.
 
 Rules, fixed in advance:
-- Three $100k accounts, one per copy delay. Each splits its money equally between the leaders that
-  still had >= $10k when the desk started; each leader gets its own "slice".
+- Three $100k accounts copy the wallets in leaders.json, one per copy delay (1, 15, 60 min). A fourth
+  account (added 2026-11-13) copies the daily traders in daily.json 1 minute late. Each account splits
+  its money equally between its wallets that had >= $10k when the account opened ("slices").
 - A slice holds the leader's positions scaled to the slice's money (the same leverage as the
   leader), capped at 5x in total. It trades only when the leader trades.
 - Fills: the open price of the first 1-minute candle at/after (leader fill + delay), plus 0.045%
@@ -27,10 +28,11 @@ import urllib.request
 API = "https://api.hyperliquid.xyz/info"
 HERE = os.path.dirname(os.path.abspath(__file__))
 START_CASH = 100_000.0
-ACCOUNTS = {
-    "fast": {"name": "1-minute copier", "delay": 60_000},
-    "slow": {"name": "15-minute copier", "delay": 900_000},
-    "hourly": {"name": "1-hour copier", "delay": 3_600_000},
+ACCOUNTS = {  # existing accounts are never edited (that would spoil the comparison): add new ones
+    "fast": {"name": "1-minute copier", "delay": 60_000, "group": "leaders.json"},
+    "slow": {"name": "15-minute copier", "delay": 900_000, "group": "leaders.json"},
+    "hourly": {"name": "1-hour copier", "delay": 3_600_000, "group": "leaders.json"},
+    "daily": {"name": "Daily traders", "delay": 60_000, "group": "daily.json"},
 }
 FEE, SLIP = 0.00045, 0.0005
 MAX_LEV = 5.0
@@ -219,8 +221,8 @@ def account_equity(acct):
 
 # ---------------------------------------------------------------- the run
 
-def load_leaders():
-    return json.load(open(os.path.join(HERE, "leaders.json")))
+def load_group(name):
+    return json.load(open(os.path.join(HERE, name)))
 
 
 def snapshot_leader(addr):
@@ -229,40 +231,57 @@ def snapshot_leader(addr):
     return pos, {p["position"]["coin"]: float(p["position"]["positionValue"]) for p in st["assetPositions"] if main_dex(p["position"]["coin"])}
 
 
+def ensure_leader(led, addr, label, t, now):
+    """Add a leader the first time any account copies it. Returns (current positions, equity at t)."""
+    ts, eq, _, _ = account_history(addr, t - H, now)
+    e = interp(ts, eq, t)
+    pos, vals = snapshot_leader(addr)
+    if addr not in led["leaders"]:
+        recent = post({"type": "userFills", "user": addr}) or []
+        ok = e >= MIN_LEADER_EQ
+        led["leaders"][addr] = {"label": label, "status": "active" if ok else "left",
+                                "note": "" if ok else f"had only ${e:,.0f} when copying started",
+                                "base_eq": e, "eq": e, "flow": 0.0,
+                                "last_fill": max((x["time"] for x in recent), default=None), "pos": {}}
+    led["leaders"][addr]["pos"] = {c: round(v) for c, v in vals.items()}
+    return pos, e
+
+
+def open_account(led, aid, t, now, mids):
+    """Open a $100k account at time t holding its leaders' current positions (scaled), at current prices."""
+    cfg = ACCOUNTS[aid]
+    live = []
+    for addr, label in load_group(cfg["group"]).items():
+        pos, e = ensure_leader(led, addr, label, t, now)
+        if led["leaders"][addr]["status"] == "active" and e >= MIN_LEADER_EQ:
+            live.append((addr, pos, e))
+    acct = {"name": cfg["name"], "delay": cfg["delay"], "group": cfg["group"], "opened": t,
+            "cash": 0.0 if live else START_CASH, "slices": {}, "curve": [], "trades": []}
+    for addr, pos, e in live:
+        sl = acct["slices"][addr] = new_slice(START_CASH / len(live))
+        for coin, size in pos.items():
+            if coin in mids and size:
+                r = rebalance(sl, coin, size * sl["eq"] / e, mids[coin])
+                if r:
+                    acct["trades"].append([t, addr, coin, r[0], mids[coin], r[1]])
+    acct["curve"].append([t, round(account_equity(acct), 2), mids.get("BTC")])
+    led["accounts"][aid] = acct
+    led["log"].append({"ts": t, "msg": f"Opened {cfg['name']}: copying {len(live)} of "
+                                         f"{len(load_group(cfg['group']))} wallets (${START_CASH / max(len(live), 1):,.0f} each)"})
+
+
 def start_ledger(now):
     t = now - SETTLE
     mids = {k: float(v) for k, v in post({"type": "allMids"}).items()}
-    leaders, live = {}, []
-    for addr, label in load_leaders().items():
-        ts, eq, _, _ = account_history(addr, t - H, now)
-        e = interp(ts, eq, t)
-        pos, _ = snapshot_leader(addr)
-        recent = post({"type": "userFills", "user": addr}) or []
-        leaders[addr] = {"label": label, "status": "active" if e >= MIN_LEADER_EQ else "left",
-                         "note": "" if e >= MIN_LEADER_EQ else f"had only ${e:,.0f} when copying started",
-                         "base_eq": e, "eq": e, "flow": 0.0, "last_fill": max((x["time"] for x in recent), default=None), "pos": {}}
-        if e >= MIN_LEADER_EQ:
-            live.append((addr, pos, e))
-    led = {"version": 1, "created": t, "synced_to": t, "runs": 0, "leaders": leaders, "accounts": {}, "log": []}
-    for aid, cfg in ACCOUNTS.items():
-        acct = {"name": cfg["name"], "delay": cfg["delay"], "cash": 0.0, "slices": {}, "curve": [], "trades": []}
-        for addr, pos, e in live:
-            sl = acct["slices"][addr] = new_slice(START_CASH / len(live))
-            for coin, size in pos.items():
-                if coin in mids and size:
-                    r = rebalance(sl, coin, size * sl["eq"] / e, mids[coin])
-                    if r:
-                        acct["trades"].append([t, addr, coin, r[0], mids[coin], r[1]])
-        acct["curve"].append([t, round(account_equity(acct), 2), mids.get("BTC")])
-        led["accounts"][aid] = acct
-    led["log"].append({"ts": t, "msg": f"Started: copying {len(live)} of {len(leaders)} wallets "
-                                         f"(${START_CASH / max(len(live), 1):,.0f} each per account)"})
+    led = {"version": 1, "created": t, "synced_to": t, "runs": 0, "leaders": {}, "accounts": {}, "log": []}
+    for aid in ACCOUNTS:
+        open_account(led, aid, t, now, mids)
     return led
 
 
-def run(led, now):
+def run(led, now, min_step=MIN_STEP):
     t0, t1 = led["synced_to"], now - SETTLE
-    if t1 - t0 < MIN_STEP:
+    if t1 - t0 < min_step:
         return led, False
     began, CALLS["n"] = time.time(), 0
     mids = {k: float(v) for k, v in post({"type": "allMids"}).items()}
@@ -336,6 +355,9 @@ def run(led, now):
     for addr, L in led["leaders"].items():
         if L["status"] == "active":
             L["pos"] = {c: round(v) for c, v in snapshot_leader(addr)[1].items()}
+    for aid in ACCOUNTS:
+        if aid not in led["accounts"]:
+            open_account(led, aid, t1, now, mids)
     led["synced_to"] = t1
     led["runs"] += 1
     led["last_run"] = {"ts": now, "from": t0, "to": t1, "leader_fills": n_fills, "api_calls": CALLS["n"],

@@ -31,20 +31,33 @@ STATIC = Path(__file__).resolve().parent / "static"
 REPO = os.environ.get("GITHUB_REPO") or CFG["cloud"]["repo"]
 BRANCH = os.environ.get("LEDGER_BRANCH") or CFG["cloud"]["ledger_branch"]
 CACHE = {"state": b"{}", "ledger": None}
-COPY = {"body": None, "ts": 0.0, "busy": False, "lock": threading.Lock()}
+COPY = {"body": None, "led": None, "ts": 0.0, "busy": False, "lock": threading.Lock()}
 COPY_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/copy_ledger.json"
+COPY_EVERY = 90  # seconds between catch-ups while someone has the page open
 
 
 def refresh_copy():
-    """Catch the copy desk up to now for the dashboard. The GitHub job saves the ledger, but GitHub
-    runs it only every few hours; the replay is deterministic, so this in-memory catch-up shows the
-    same numbers the next saved run will. Nothing here is saved."""
+    """Keep the copy desk live for the dashboard. The GitHub job saves the ledger, but GitHub runs it
+    only every few hours, so this extends it to the present in memory: from the saved ledger when that
+    is newer, otherwise from the last in-memory state. The replay is deterministic, so the next saved
+    run shows the same numbers. Nothing here is saved."""
     from ..copydesk import desk as copydesk
     try:
-        with urllib.request.urlopen(f"{COPY_URL}?t={int(time.time())}", timeout=30) as r:
-            led = json.load(r)
-        COPY["body"] = json.dumps(led, separators=(",", ":")).encode()
-        led, _ = copydesk.run(led, int(time.time() * 1000))
+        led = COPY["led"]
+        try:
+            with urllib.request.urlopen(f"{COPY_URL}?t={int(time.time())}", timeout=30) as r:
+                saved = json.load(r)
+            if led is None or saved["synced_to"] > led["synced_to"]:
+                led = saved
+        except Exception as e:  # noqa: BLE001
+            print(f"copy ledger download failed: {type(e).__name__}", flush=True)
+            if led is None:
+                return
+        if COPY["body"] is None:
+            COPY["body"] = json.dumps(led, separators=(",", ":")).encode()
+        led = json.loads(json.dumps(led))  # work on a copy: a failed catch-up leaves the last good state
+        led, _ = copydesk.run(led, int(time.time() * 1000), min_step=60_000)
+        COPY["led"] = led
         COPY["body"] = json.dumps(led, separators=(",", ":")).encode()
     except Exception as e:  # noqa: BLE001
         print(f"copy desk catch-up failed: {type(e).__name__}: {e}", flush=True)
@@ -54,14 +67,12 @@ def refresh_copy():
 
 def copy_body():
     with COPY["lock"]:
-        if not COPY["busy"] and time.time() - COPY["ts"] > 600:
+        if not COPY["busy"] and time.time() - COPY["ts"] > COPY_EVERY:
             COPY["busy"] = True
             threading.Thread(target=refresh_copy, daemon=True).start()
     if COPY["body"] is None:
         return None
-    return b'{"updating":' + (b"true" if COPY["busy"] else b"false") + b',"ledger":' + COPY["body"] + b"}"
-SELF_URL = os.environ.get("RENDER_EXTERNAL_URL")  # set by Render; absent when run locally
-BUDGET = float(CFG["cloud"].get("awake_budget_hours", 460))
+    return b'{"updating":' + (b"true" if COPY["busy"] else b"false") + b',"server_time":' + str(int(time.time() * 1000)).encode() + b',"ledger":' + COPY["body"] + b"}"
 
 
 def next_evening(now):

@@ -38,12 +38,18 @@ def paged(kind, addr, until, unwrap):
         start = max(x["time"] for x in r) + 1
 
 if __name__ == "__main__":
-    addrs = pool(); print("pool", len(addrs), flush=True)
+    addrs = json.load(open(sys.argv[sys.argv.index("--list") + 1])) if "--list" in sys.argv else pool()
+    print("pool", len(addrs), flush=True)
     if "--count" in sys.argv: sys.exit()
     for i, a in enumerate(addrs):
         f = os.path.join(OUT, a + ".json")
         if os.path.exists(f): continue
         asof = int(time.time() * 1000)
+        pf = os.path.join(C, "portfolio", a + ".json")
+        if not os.path.exists(pf):
+            pr = post({"type": "portfolio", "user": a})
+            if pr is None: continue
+            json.dump(pr, open(pf, "w"))
         st = post({"type": "clearinghouseState", "user": a})
         fills, ok1 = paged("userFillsByTime", a, asof, lambda x: x)
         twap, ok2 = paged("userTwapSliceFillsByTime", a, asof, lambda x: x["fill"])

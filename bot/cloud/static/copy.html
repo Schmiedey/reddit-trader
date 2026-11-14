@@ -11,13 +11,13 @@
 :root{
   --bg:#f4f5f7; --panel:#ffffff; --sub:#f8f9fb; --line:#e3e6eb; --line2:#cfd4dc;
   --tx:#14181f; --tx2:#4d5664; --tx3:#7c8594;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --spy:#7c8594;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#8a5cd1; --spy:#7c8594;
   --pos:#127a4a; --neg:#c23b3b; --focus:#2a78d6;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0e1014; --panel:#15181e; --sub:#1a1e25; --line:#252a33; --line2:#343a46;
   --tx:#e7e9ed; --tx2:#a6aebb; --tx3:#757e8c;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --spy:#8b93a0;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#9d7ce8; --spy:#8b93a0;
   --pos:#3ccf86; --neg:#ff7a7a; --focus:#3987e5;
 }}
 *{box-sizing:border-box}
@@ -37,8 +37,10 @@ header .wrap{display:flex;align-items:center;gap:10px 28px;min-height:52px;flex-
 .meta{display:flex;flex-wrap:wrap;gap:4px 22px;color:var(--tx3);font-size:12.5px;margin-left:auto}
 .meta b{color:var(--tx);font-weight:500}
 main{padding:16px 0 40px;display:grid;gap:14px}
-.grid{display:grid;gap:14px} .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g32{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}
-@media (max-width:1100px){.g3,.g32{grid-template-columns:1fr}}
+.grid{display:grid;gap:14px} .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))} .g32{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}
+@media (max-width:1100px){.g32{grid-template-columns:1fr}}
+.live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos);margin-right:6px;vertical-align:1px}
+.live.busy{background:var(--s2)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
 .ph{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
 .ph .desc{color:var(--tx3);font-size:12.5px;margin-top:1px}
@@ -73,10 +75,12 @@ svg text{fill:var(--tx3);font-size:11px}
     <section class="panel"><div class="ph"><div><h2>Desk log</h2><div class="desc">Starts, stops and wallets that left</div></div></div>
       <div class="pb flush tw"><table><tbody id="log"></tbody></table></div></section>
   </div>
-  <section class="panel"><div class="ph"><div><h2>Wallets copied</h2><div class="desc">Return of each wallet's slice in each account. Leader equity and positions are from the exchange at the last run.</div></div></div>
-    <div class="pb flush tw"><table><thead><tr><th>Wallet</th><th>Status</th><th class="r">Leader equity</th><th class="r">1-min slice</th><th class="r">15-min</th><th class="r">1-hour</th><th class="r">Trades (1-min)</th><th class="r">Fees + funding (1-min)</th><th>Leader holds now</th><th>Last leader trade</th></tr></thead><tbody id="leaders"></tbody></table></div></section>
-  <section class="panel"><div class="ph"><div><h2>Recent paper trades · 1-minute copier</h2><div class="desc">Leader trades within the same minute are combined into one copy trade</div></div></div>
-    <div class="pb flush tw"><table><thead><tr><th>Time</th><th>Wallet</th><th>Coin</th><th>Side</th><th class="r">Size</th><th class="r">Price</th><th class="r">Cost</th></tr></thead><tbody id="trades"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><div><h2>Daily traders</h2><div class="desc">7 wallets that close trades every day or two with high win rates (added Nov 13). Copied 1 minute late.</div></div></div>
+    <div class="pb flush tw"><table><thead id="lh-daily"></thead><tbody id="leaders-daily"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><div><h2>Original 8 wallets</h2><div class="desc">Wallets that were profitable to copy in all four quarters. Copied 1, 15 and 60 minutes late.</div></div></div>
+    <div class="pb flush tw"><table><thead id="lh-core"></thead><tbody id="leaders-core"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><div><h2>Recent paper trades</h2><div class="desc">All accounts, newest first. Leader trades within the same minute are combined into one copy trade.</div></div></div>
+    <div class="pb flush tw"><table><thead><tr><th>Time</th><th>Account</th><th>Wallet</th><th>Coin</th><th>Side</th><th class="r">Size</th><th class="r">Price</th><th class="r">Cost</th></tr></thead><tbody id="trades"></tbody></table></div></section>
   <section class="panel"><div class="ph"><h2>Rules</h2></div><div class="pb"><ul class="note" style="margin:0;padding-left:18px">
     <li>Paper only: no exchange account, no keys, no orders. Leader trades come from Hyperliquid's public record.</li>
     <li>A job runs a few times a day and replays every leader trade since the last run, entering 1, 15 or 60 minutes after the leader. That is the only difference between the three accounts.</li>
@@ -90,7 +94,9 @@ svg text{fill:var(--tx3);font-size:11px}
 const LOCAL = new URLSearchParams(location.search).get("ledger");
 const RAW = "https://raw.githubusercontent.com/Schmiedey/reddit-trader/paper-ledger/copy_ledger.json";
 let timer = null;
-const COL = {fast: "var(--s1)", slow: "var(--s2)", hourly: "var(--s3)"};
+const COL = {fast: "var(--s1)", slow: "var(--s2)", hourly: "var(--s3)", daily: "var(--s4)"};
+const SHORT = {fast: "1-min", slow: "15-min", hourly: "1-hour", daily: "Daily"};
+let serverTime = null, busy = false;
 const $ = id => document.getElementById(id);
 const usd = (v, d = 0) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: d, minimumFractionDigits: d});
 const pct = v => `<span class="${v > 0 ? "up" : v < 0 ? "dn" : "mut"}">${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(2)}%</span>`;
@@ -98,27 +104,27 @@ const when = ms => ms ? new Date(ms).toLocaleString("en-US", {month: "short", da
 const ago = ms => { if (!ms) return "never"; const h = (Date.now() - ms) / 36e5; return h < 1 ? `${Math.round(h * 60)}m ago` : h < 48 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)}d ago`; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 
-function sliceStart(led, n) { return 100000 / Math.max(n, 1); }
-
 function render(led) {
-  const A = led.accounts, L = led.leaders, live = Object.keys(A.fast.slices).length;
-  const start = sliceStart(led, live);
-  $("meta").innerHTML = `<span>Started <b>${when(led.created)}</b></span><span>Synced to <b>${when(led.synced_to)}</b> (${ago(led.synced_to)})</span>` +
-    `<span>Runs <b>${led.runs}</b></span>` + (led.last_run ? `<span>Last run <b>${led.last_run.leader_fills.toLocaleString()}</b> leader fills</span>` : "");
+  const A = led.accounts, L = led.leaders;
+  const startOf = id => 100000 / Math.max(Object.keys(A[id].slices).length, 1);
+  $("meta").innerHTML = `<span><span class="live ${busy ? "busy" : ""}"></span><b>${busy ? "Catching up…" : "Live"}</b></span>` +
+    `<span>Positions as of <b>${when(led.synced_to)}</b></span>` +
+    `<span>Saved by the cloud job <b>${led.runs}</b> times</span>` + (serverTime ? `<span>Page refreshed <b>${new Date(serverTime).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", second: "2-digit"})}</b></span>` : "");
   // accounts
   $("accts").innerHTML = Object.entries(A).map(([id, a]) => {
-    const eq = a.curve[a.curve.length - 1][1], c0 = a.curve[0];
-    const btc = c0[2] ? a.curve[a.curve.length - 1][2] / c0[2] - 1 : 0;
+    const last = a.curve[a.curve.length - 1], eq = last[1], c0 = a.curve[0];
+    const btc = c0[2] ? last[2] / c0[2] - 1 : 0;
     const s = Object.values(a.slices), fees = s.reduce((x, y) => x + y.fees, 0), fund = s.reduce((x, y) => x + y.funding, 0);
     const open = s.reduce((x, y) => x + Object.keys(y.pos).length, 0);
-    return `<section class="panel"><div class="ph"><div><h2><span class="sw" style="--c:${COL[id]}"></span>${esc(a.name)}</h2><div class="desc">Enters ${a.delay / 60000} min after the leader</div></div></div>
+    const what = id === "daily" ? `${s.length} daily traders` : `${s.length} original wallets`;
+    return `<section class="panel"><div class="ph"><div><h2><span class="sw" style="--c:${COL[id] || "var(--tx3)"}"></span>${esc(a.name)}</h2><div class="desc">${what} · enters ${a.delay / 60000} min late · since ${when(c0[0])}</div></div></div>
       <div class="pb"><div class="big n">${usd(eq)}</div><div style="margin:2px 0 12px">${pct(eq / 100000 - 1)} <span class="faint">since start · BTC ${pct(btc)}</span></div>
       <div class="kpi"><div><div class="l">Fees + slippage</div><div class="v n">${usd(-fees)}</div></div><div><div class="l">Funding</div><div class="v n">${usd(fund)}</div></div>
       <div><div class="l">Paper trades</div><div class="v n">${s.reduce((x, y) => x + y.trades, 0).toLocaleString()}</div></div><div><div class="l">Open positions</div><div class="v n">${open}</div></div></div></div></section>`;
   }).join("");
   // chart
   const svg = $("chart"), W = svg.clientWidth || 800, Hh = 260, pad = {l: 44, r: 10, t: 10, b: 22};
-  const series = Object.entries(A).map(([id, a]) => ({c: COL[id], d: false, pts: a.curve.map(p => [p[0], p[1] / 100000 - 1])}));
+  const series = Object.entries(A).map(([id, a]) => ({c: COL[id] || "var(--tx3)", d: false, pts: a.curve.map(p => [p[0], p[1] / 100000 - 1])}));
   const b = A.fast.curve.filter(p => p[2]); if (b.length) series.push({c: "var(--spy)", d: true, pts: b.map(p => [p[0], p[2] / b[0][2] - 1])});
   const all = series.flatMap(s => s.pts), t0 = Math.min(...all.map(p => p[0])), t1 = Math.max(...all.map(p => p[0]));
   let lo = Math.min(0, ...all.map(p => p[1])), hi = Math.max(0, ...all.map(p => p[1])); const span = (hi - lo) || 0.01; lo -= span * 0.08; hi += span * 0.08;
@@ -129,23 +135,33 @@ function render(led) {
   g += `<text x="${pad.l}" y="${Hh - 4}">${when(t0)}</text><text x="${W - pad.r}" y="${Hh - 4}" text-anchor="end">${when(t1)}</text>`;
   for (const s of series) g += `<polyline fill="none" stroke="${s.c}" stroke-width="1.6" ${s.d ? 'stroke-dasharray="4 3"' : ""} points="${s.pts.map(p => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ")}"/>`;
   svg.innerHTML = g;
-  $("legend").innerHTML = Object.entries(A).map(([id, a]) => `<span><span class="sw" style="--c:${COL[id]}"></span>${esc(a.name)}</span>`).join("") + `<span><span class="sw dash" style="--c:var(--spy)"></span>BTC</span>`;
-  // leaders
-  const sl = (id, ad) => A[id].slices[ad];
-  $("leaders").innerHTML = Object.entries(L).map(([ad, l]) => {
-    const f = sl("fast", ad), cell = id => sl(id, ad) ? pct(sl(id, ad).eq / start - 1) : '<span class="faint">—</span>';
-    const holds = Object.entries(l.pos || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4).map(([c, v]) => `${esc(c)} ${usd(v / 1000)}k`).join(", ");
-    return `<tr><td><a href="https://hypurrscan.io/address/${ad}" target="_blank" rel="noopener">${esc(l.label)}</a></td>
-      <td><span class="tag ${l.status === "left" ? "left" : ""}" title="${esc(l.note || "")}">${l.status === "left" ? "left" : "copying"}</span></td>
-      <td class="r n">${usd(l.eq)}</td><td class="r n">${cell("fast")}</td><td class="r n">${cell("slow")}</td><td class="r n">${cell("hourly")}</td>
-      <td class="r n">${f ? f.trades.toLocaleString() : "—"}</td><td class="r n">${f ? usd(f.funding - f.fees) : "—"}</td>
-      <td class="mut">${holds || '<span class="faint">nothing</span>'}</td><td class="n mut">${ago(l.last_fill)}</td></tr>`;
-  }).join("");
-  // trades
+  $("legend").innerHTML = Object.entries(A).map(([id, a]) => `<span><span class="sw" style="--c:${COL[id] || "var(--tx3)"}"></span>${esc(a.name)}</span>`).join("") + `<span><span class="sw dash" style="--c:var(--spy)"></span>BTC</span>`;
+  // wallet tables: one per wallet list, a return column for each account that copies it
+  const groups = {};
+  for (const [id, a] of Object.entries(A)) (groups[a.group || "leaders.json"] ||= []).push(id);
+  const table = (ids, head, body) => {
+    const main = ids[0];
+    $(head).innerHTML = `<tr><th>Wallet</th><th>Status</th><th class="r">Leader equity</th>${ids.map(id => `<th class="r">${ids.length > 1 ? SHORT[id] + " slice" : "Slice return"}</th>`).join("")}<th class="r">Paper trades</th><th class="r">Fees + funding</th><th>Leader holds now</th><th>Last leader trade</th></tr>`;
+    const addrs = Object.keys(L).filter(ad => ids.some(id => A[id].slices[ad]) || (main === "fast" && !Object.values(A).some(a => a.slices[ad])));
+    $(body).innerHTML = addrs.map(ad => {
+      const l = L[ad], f = A[main].slices[ad];
+      const cell = id => A[id].slices[ad] ? pct(A[id].slices[ad].eq / startOf(id) - 1) : '<span class="faint">—</span>';
+      const holds = Object.entries(l.pos || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4).map(([c, v]) => `${esc(c)} ${v < 0 ? "short" : "long"} ${usd(Math.abs(v) / 1000)}k`).join(", ");
+      return `<tr><td><a href="https://hypurrscan.io/address/${ad}" target="_blank" rel="noopener">${esc(l.label)}</a></td>
+        <td><span class="tag ${l.status === "left" ? "left" : ""}" title="${esc(l.note || "")}">${l.status === "left" ? "left" : "copying"}</span></td>
+        <td class="r n">${usd(l.eq)}</td>${ids.map(id => `<td class="r n">${cell(id)}</td>`).join("")}
+        <td class="r n">${f ? f.trades.toLocaleString() : "—"}</td><td class="r n">${f ? usd(f.funding - f.fees) : "—"}</td>
+        <td class="mut">${holds || '<span class="faint">nothing</span>'}</td><td class="n mut">${ago(l.last_fill)}</td></tr>`;
+    }).join("") || `<tr><td colspan="9" class="faint">Opens at the next sync</td></tr>`;
+  };
+  table(groups["daily.json"] || [], "lh-daily", "leaders-daily");
+  table(groups["leaders.json"] || ["fast"], "lh-core", "leaders-core");
+  // trades, all accounts
   const lab = ad => (L[ad] ? L[ad].label.split(" ·")[0] : ad.slice(0, 6));
-  $("trades").innerHTML = A.fast.trades.slice(-60).reverse().map(t => `<tr><td class="n mut">${when(t[0])}</td><td>${esc(lab(t[1]))}</td><td>${esc(t[2])}</td>
+  const tr = Object.entries(A).flatMap(([id, a]) => a.trades.slice(-80).map(t => [id, ...t])).sort((p, q) => q[1] - p[1]).slice(0, 80);
+  $("trades").innerHTML = tr.map(([id, ...t]) => `<tr><td class="n mut">${when(t[0])}</td><td><span class="sw" style="--c:${COL[id] || "var(--tx3)"}"></span>${esc(SHORT[id] || id)}</td><td>${esc(lab(t[1]))}</td><td>${esc(t[2])}</td>
     <td class="${t[3] > 0 ? "up" : "dn"}">${t[3] > 0 ? "Buy" : "Sell"}</td><td class="r n">${usd(Math.abs(t[3] * t[4]))}</td><td class="r n">${t[4].toLocaleString()}</td><td class="r n mut">${usd(t[5], 2)}</td></tr>`).join("")
-    || `<tr><td colspan="7" class="faint">No copy trades yet</td></tr>`;
+    || `<tr><td colspan="8" class="faint">No copy trades yet</td></tr>`;
   $("log").innerHTML = (led.log || []).slice().reverse().slice(0, 20).map(e => `<tr><td class="n mut">${when(e.ts)}</td><td>${esc(e.msg)}</td></tr>`).join("");
 }
 
@@ -157,15 +173,14 @@ async function load() {
     else {
       const r = await fetch("/api/copy", {cache: "no-store"});
       const j = await r.json();
-      updating = !!j.updating;
+      updating = !!j.updating; busy = updating; serverTime = j.server_time || Date.now();
       if (r.ok) led = j.ledger;
       else { const g = await fetch(RAW + "?t=" + Date.now(), {cache: "no-store"}); if (g.ok) led = await g.json(); }
     }
     if (!led) throw new Error("The copy desk has not saved its first ledger yet.");
     render(led); $("err").style.display = "none";
-    if (updating) $("meta").insertAdjacentHTML("beforeend", '<span><b>Catching up to now…</b></span>');
   } catch (e) { $("err").textContent = e.message; $("err").style.display = "block"; updating = true; }
-  timer = setTimeout(load, updating ? 15000 : 5 * 60 * 1000);
+  timer = setTimeout(load, updating ? 15000 : 60000);
 }
 load();
 </script>
