@@ -5,7 +5,8 @@ Every leader trade is public and timestamped, so this does not need to run all t
 run, as if a bot had copied each of their fills 1, 15 or 60 minutes later. Standard library only.
 
 Rules, fixed in advance:
-- Three $100k accounts copy the wallets in leaders.json, one per copy delay (1, 15, 60 min). A fourth
+- A $100k account copies the wallets in leaders.json 1 minute late (15- and 60-minute versions ran
+  Nov 13-14 and were closed). Another
   account (added 2026-11-13) copies the daily traders in daily.json 1 minute late. Each account splits
   its money equally between its wallets that had >= $10k when the account opened ("slices").
 - A fifth account (added 2026-11-14) trades a signal instead of copying: the t-stat-weighted net
@@ -34,8 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 START_CASH = 100_000.0
 ACCOUNTS = {  # existing accounts are never edited (that would spoil the comparison): add new ones
     "fast": {"name": "1-minute copier", "delay": 60_000, "group": "leaders.json"},
-    "slow": {"name": "15-minute copier", "delay": 900_000, "group": "leaders.json"},
-    "hourly": {"name": "1-hour copier", "delay": 3_600_000, "group": "leaders.json"},
+    # "slow" (15-minute) and "hourly" (1-hour) copiers were removed 2026-11-14 at the user's request
     "daily": {"name": "Daily traders", "delay": 60_000, "group": "daily.json"},
     "consensus": {"name": "Consensus signal", "delay": 3_600_000, "group": "consensus.json", "kind": "signal"},
 }
@@ -351,6 +351,10 @@ def signal_events(led, acct, raw, t0, t1):
 
 
 def run(led, now, min_step=MIN_STEP):
+    for aid in [a for a in led["accounts"] if a not in ACCOUNTS]:  # accounts that were retired
+        a = led["accounts"].pop(aid)
+        led["log"].append({"ts": led["synced_to"], "msg": f"Closed {a['name']} at ${account_equity(a):,.0f} "
+                                                          f"({account_equity(a) / START_CASH - 1:+.1%})"})
     t0, t1 = led["synced_to"], now - SETTLE
     if t1 - t0 < min_step:
         return led, False
