@@ -217,3 +217,33 @@ def test_runner_tracks_saved_ledger_and_hours(tmp_path, monkeypatch):
     for k in range(1, 30):
         r.track_awake(t0 + 15 * k)
     assert 0.1 < r.month_hours(t0) + r.awake_acc / 3600 < 0.13             # ~7 minutes counted
+
+
+def test_app_module_defines_everything_the_scheduler_uses():
+    """A merge once dropped two module constants and every scheduler pass crashed with NameError."""
+    import ast
+    import inspect
+
+    from bot.cloud import app
+
+    tree = ast.parse(inspect.getsource(app))
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    missing = sorted(n for n in names if n.isupper() and not hasattr(app, n))
+    assert not missing, missing
+
+
+def test_scheduler_pass_runs_on_a_real_ledger(tmp_path):
+    from bot.cloud import app
+    from bot.cloud.engine import Engine
+
+    r = app.Runner()
+    r.eng = Engine(tmp_path, park=False, bars_fn=lambda *_: {})
+    r.restore = "off"
+    r.eng.set("collect_ok", __import__("time").time())
+    r.snapshot()
+    r.saved_ts = r.snap_ts
+    r.publish(r.snap_ts, force=True)
+    r.decide_awake(r.snap_ts, r.work(r.snap_ts))
+    import json as _json
+    st = _json.loads(app.CACHE["state"])
+    assert "boot" in st and st["awake"]["budget"] > 0
