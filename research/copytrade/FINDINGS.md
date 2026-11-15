@@ -163,3 +163,19 @@ at the 98th percentile is suggestive, not proof.
 
 Test 3 repeats the live lesson: daily traders with high win rates, chosen without lookahead, lost 14%
 to copy while random wallets made 10%.
+
+## Search across 10,000 wallets (`fetch_universe.py`, `skill2.py`, 2026-11-14)
+Universe: every leaderboard wallet with $50M-$2B lifetime volume (volume only, no profit filter):
+11,579 downloaded, 10,153 usable (1,742 trade too fast for the public history). Timing skill on
+BTC/ETH/SOL/HYPE scored per wallet against 1,000 hourly time-shifts of its own positions, with a
+Benjamini-Hochberg correction over testable wallets. Skill measured Apr 21-Jun 30, rule chosen on
+Jul 1-Aug 15, tested once on Aug 16-Nov 12.
+
+- Chosen rule (top 200 wallets, threshold 0.1): **−1.7%** in the test window (buy-and-hold +12.2%,
+  beats 48% of fakes). Fails.
+- Every rule, for reference, on the test window: −7.0% to +0.6%. The t>=2 group grows from 7 to 51
+  wallets in the bigger universe and its consensus loses 6.1%.
+- 41 wallets pass the correction on Apr 21-Aug 15 (q<=0.2), but their consensus also loses (−6.0%).
+- Conclusion: in 10,000 public wallets there is no group whose positioning beats holding the coins
+  out of sample. The live Consensus account's +27.9% backtest came from 7 wallets picked out of 409
+  and does not survive a bigger search; treat it as likely luck until its forward test says otherwise.
